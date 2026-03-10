@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --color-home: #1e40af;
+  --color-away: #991b1b;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
