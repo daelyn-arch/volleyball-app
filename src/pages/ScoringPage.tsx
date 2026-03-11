@@ -51,31 +51,14 @@ export default function ScoringPage() {
   const awayServing = rotation?.servingTeam === 'away';
 
   return (
-    <div data-name="scoring-page" className="h-full flex flex-col bg-slate-900">
+    <div data-name="scoring-page" className="h-full flex flex-col bg-slate-900 overflow-hidden">
       {/* Top Bar */}
-      <div data-name="top-bar" className="bg-slate-800 px-4 py-2 flex items-center justify-between shrink-0">
-        <div data-name="set-info" className="text-sm font-semibold text-slate-300">
-          Sets: {setsWon.home}-{setsWon.away} | SET {currentSetIndex + 1}
+      <div data-name="top-bar" className="bg-slate-800 px-4 py-[8px] flex items-center shrink-0">
+        <div data-name="set-info" className="text-xs font-semibold text-slate-300">
+          Sets: {setsWon.home} {setsWon.away} | SET {currentSetIndex + 1}
           {currentSetIndex === config.bestOf - 1 && (
             <span className="text-yellow-400 ml-1">(Deciding)</span>
           )}
-        </div>
-        <div data-name="top-bar-buttons" className="flex gap-2">
-          <UndoButton onUndo={undo} disabled={events.length === 0} />
-          <button
-            data-name="preview-btn"
-            onClick={() => setShowPdfPreview(true)}
-            className="bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-2 rounded-lg transition-colors"
-          >
-            Preview
-          </button>
-          <button
-            data-name="scoresheet-btn"
-            onClick={() => navigate('/scoresheet')}
-            className="bg-slate-600 hover:bg-slate-500 text-white text-sm px-3 py-2 rounded-lg transition-colors"
-          >
-            Scoresheet
-          </button>
         </div>
       </div>
 
@@ -130,30 +113,40 @@ export default function ScoringPage() {
               ? `Match Over! ${setWinner === 'home' ? homeTeam.name : awayTeam.name} wins the match ${setsWon.home}-${setsWon.away}`
               : `Set ${currentSetIndex + 1} won by ${setWinner === 'home' ? homeTeam.name : awayTeam.name} (${score.home}-${score.away})`}
           </p>
-          {!matchComplete && (
+          <div className="flex justify-center gap-3">
+            {!matchComplete && (
+              <button
+                data-name="next-set-btn"
+                onClick={() => {
+                  advanceToNextSet();
+                  navigate(`/lineup/${currentSetIndex + 1}`);
+                }}
+                className="flex-1 max-w-[200px] bg-green-600 hover:bg-green-700 text-white text-lg font-semibold py-3 rounded-xl transition-colors"
+              >
+                Start Set {currentSetIndex + 2}
+              </button>
+            )}
             <button
-              data-name="next-set-btn"
-              onClick={() => {
-                advanceToNextSet();
-                navigate(`/lineup/${currentSetIndex + 1}`);
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white text-lg font-semibold px-8 py-3 rounded-xl transition-colors"
+              data-name="view-scoresheet-btn"
+              onClick={() => navigate('/scoresheet')}
+              className="flex-1 max-w-[200px] bg-slate-600 hover:bg-slate-500 text-white text-lg font-semibold py-3 rounded-xl transition-colors"
             >
-              Start Set {currentSetIndex + 2}
+              View Scoresheet
             </button>
-          )}
-          <button
-            data-name="view-scoresheet-btn"
-            onClick={() => navigate('/scoresheet')}
-            className="ml-4 bg-slate-600 hover:bg-slate-500 text-white text-lg font-semibold px-8 py-3 rounded-xl transition-colors"
-          >
-            View Scoresheet
-          </button>
+          </div>
         </div>
       )}
 
       {/* Event Log */}
-      <EventLog events={events} setIndex={currentSetIndex} homeTeam={homeTeam} awayTeam={awayTeam} />
+      <EventLog events={events} setIndex={currentSetIndex} homeTeam={homeTeam} awayTeam={awayTeam}
+        actions={
+          <div className="flex gap-2">
+            <UndoButton onUndo={undo} disabled={events.length === 0} />
+            <button data-name="preview-btn" onClick={() => setShowPdfPreview(true)} className="bg-green-700 hover:bg-green-600 text-white text-xs px-2 py-1 rounded-lg transition-colors">Preview</button>
+            <button data-name="scoresheet-btn" onClick={() => navigate('/scoresheet')} className="bg-slate-600 hover:bg-slate-500 text-white text-xs px-2 py-1 rounded-lg transition-colors">Scoresheet</button>
+          </div>
+        }
+      />
 
       {/* Dialogs */}
       {showSubDialog && (
@@ -220,39 +213,42 @@ function TeamPanel({
     ? 'bg-blue-700 hover:bg-blue-600 active:bg-blue-500'
     : 'bg-red-700 hover:bg-red-600 active:bg-red-500';
   return (
-    <div data-name={`${side}-panel`} className={`flex flex-col border-2 ${borderColor} ${servingBorder} rounded-xl bg-slate-800/50 p-2 gap-2`} style={{ width: '44%', maxWidth: '220px' }}>
+    <div data-name={`${side}-panel`} className={`flex-1 flex flex-col border-2 ${borderColor} ${servingBorder} rounded-xl bg-slate-800/50 p-2 gap-2 max-w-[380px]`}>
       {/* Header: T/O+SUB left, Name center, Lib right */}
-      <div data-name={`${side}-header`} className="flex items-start justify-between">
-        <div className="flex flex-col gap-1">
+      <div data-name={`${side}-header`} className="relative flex items-start">
+        <div className="flex flex-col shrink-0">
           <TimeoutButton team={teamSide} count={timeoutCount} max={maxTimeouts} disabled={setComplete} />
-          <div data-name={`${side}-sub-label`} className="text-[10px] font-semibold text-white text-center">
+          <div data-name={`${side}-sub-label`} className="text-[10px] font-semibold text-white whitespace-nowrap text-left">
             SUB [{maxSubs - subCount}]
           </div>
         </div>
-        <div data-name={`${side}-score-name`} className="flex flex-col items-center px-1">
-          <div className={`relative ${isHome ? 'bg-blue-900' : 'bg-red-900'} ${isServing ? 'border-yellow-400' : isHome ? 'border-blue-500' : 'border-red-500'} border-2 rounded-lg w-[52px] text-center`}>
+        <div data-name={`${side}-score-name`} className="absolute inset-0 flex flex-col items-center justify-start pointer-events-none">
+          <div className={`pointer-events-auto relative ${isHome ? 'bg-blue-900' : 'bg-red-900'} ${isServing ? 'border-yellow-400' : isHome ? 'border-blue-500' : 'border-red-500'} border-2 rounded-lg w-[52px] text-center`}>
             <span className="text-3xl font-bold text-white tabular-nums">{teamScore}</span>
             {isServing && (
-              <svg className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-yellow-400 ${isHome ? '-left-5' : '-right-5'}`} fill="currentColor" viewBox="0 0 20 20">
+              <svg className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-yellow-400 ${isHome ? '-left-[18px]' : '-right-[18px]'}`} fill="currentColor" viewBox="0 0 20 20">
                 <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.5" />
                 <circle cx="10" cy="10" r="3.5" />
               </svg>
             )}
           </div>
-          <span className="text-[10px] text-slate-400 font-medium leading-tight truncate max-w-full mt-0.5">{teamName}</span>
+          <span className="text-[10px] text-white font-medium leading-tight truncate max-w-full mt-0.5">{teamName}</span>
         </div>
-        {hasLibero ? (
-          <button
-            data-name={`${side}-libero-btn`}
-            onClick={onLibero}
-            disabled={setComplete}
-            className="bg-teal-700 hover:bg-teal-600 disabled:opacity-40 text-white text-xs font-semibold px-2 py-1 rounded-md transition-colors touch-manipulation"
-          >
-            Lib
-          </button>
-        ) : (
-          <div className="w-10" />
-        )}
+        <div className="ml-auto shrink-0 flex justify-center">
+          {hasLibero ? (
+            <button
+              data-name={`${side}-libero-btn`}
+              onClick={onLibero}
+              disabled={setComplete}
+              className="bg-teal-700 hover:bg-teal-600 disabled:opacity-40 text-white text-xs font-semibold rounded-md transition-colors touch-manipulation"
+              style={{ width: '37px', height: '38px' }}
+            >
+              Lib
+            </button>
+          ) : (
+            <div className="w-[37px]" />
+          )}
+        </div>
       </div>
 
       {/* Rotation Grid */}
@@ -260,9 +256,9 @@ function TeamPanel({
         <div data-name={`${side}-rotation-grid`} className="flex-1 flex flex-col justify-center">
           {/* Net-side labels */}
           <div data-name={`${side}-front-labels`} className="grid grid-cols-3 gap-1 text-center">
-            <span className="text-[10px] text-slate-500">IV</span>
-            <span className="text-[10px] text-slate-500">III</span>
-            <span className="text-[10px] text-slate-500">II</span>
+            <span className="text-[10px] text-white">IV</span>
+            <span className="text-[10px] text-white">III</span>
+            <span className="text-[10px] text-white">II</span>
           </div>
           {/* Front row */}
           <div data-name={`${side}-front-row`} className="grid grid-cols-3 gap-1">
@@ -278,9 +274,9 @@ function TeamPanel({
           </div>
           {/* Back-side labels */}
           <div data-name={`${side}-back-labels`} className="grid grid-cols-3 gap-1 text-center">
-            <span className="text-[10px] text-slate-500">V</span>
-            <span className="text-[10px] text-slate-500">VI</span>
-            <span className="text-[10px] text-slate-500">I</span>
+            <span className="text-[10px] text-white">V</span>
+            <span className="text-[10px] text-white">VI</span>
+            <span className="text-[10px] text-white">I</span>
           </div>
         </div>
       )}

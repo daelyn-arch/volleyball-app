@@ -114,14 +114,11 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
   const teamColor = team === 'home' ? 'text-blue-400' : 'text-red-400';
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className={`bg-slate-800 rounded-2xl p-6 w-full max-w-md border-2 ${borderColor}`}>
-        <h2 className={`text-2xl font-bold ${teamColor} mb-4`}>
-          Substitution - {teamData.name}
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2">
+      <div className={`bg-slate-800 rounded-2xl p-4 w-full max-w-md max-h-[70vh] overflow-y-auto border-2 ${borderColor}`}>
+        <h2 className={`text-2xl font-bold ${teamColor} mb-3`}>
+          Substitution - {teamData.name} <span className="text-base font-normal text-slate-400">({subsRemaining} remaining)</span>
         </h2>
-        <div className="text-sm text-slate-400 mb-3">
-          Subs used: {subCount}/{maxSubs} ({subsRemaining} remaining)
-        </div>
 
         {subsRemaining <= 0 ? (
           <div className="bg-red-900/50 border border-red-500 text-red-200 rounded-lg px-3 py-3 mb-4 text-center">
@@ -135,10 +132,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
           <>
             {/* Player Out - hidden when pre-selected from rotation grid */}
             {preSelectedOut != null ? (
-              <div className="mb-4">
-                <label className="block text-sm text-slate-400 mb-1">Player OUT</label>
-                <span className="text-lg font-bold text-orange-400">#{preSelectedOut}</span>
-              </div>
+              <></>
             ) : (
               <div className="mb-4">
                 <label className="block text-sm text-slate-400 mb-2">Player OUT (on court)</label>
@@ -162,7 +156,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
 
             {/* Player In */}
             <div className="mb-4">
-              <label className="block text-sm text-slate-400 mb-2">Player IN (from bench)</label>
+              <label className="block text-xl text-slate-300 font-semibold mb-2">{preSelectedOut != null ? <>Sub <span className="text-orange-400 font-bold">#{preSelectedOut}</span> For:</> : 'Player IN'}</label>
               {playerOut === null ? (
                 <div className="text-slate-500 text-sm py-2">Select a player to sub out first</div>
               ) : (

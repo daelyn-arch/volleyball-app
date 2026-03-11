@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 
 // Set worker source
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
+  'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
@@ -42,14 +42,17 @@ export default function PdfPreview({ onClose }: Props) {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Scale to fit the container width
+      // Scale to fit the container width, accounting for device pixel ratio
+      const dpr = window.devicePixelRatio || 1;
       const containerWidth = canvas.parentElement?.clientWidth || 600;
       const viewport = pdfPage.getViewport({ scale: 1 });
       const scale = (containerWidth - 16) / viewport.width; // 16px padding
-      const scaledViewport = pdfPage.getViewport({ scale });
+      const scaledViewport = pdfPage.getViewport({ scale: scale * dpr });
 
       canvas.width = scaledViewport.width;
       canvas.height = scaledViewport.height;
+      canvas.style.width = `${scaledViewport.width / dpr}px`;
+      canvas.style.height = `${scaledViewport.height / dpr}px`;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;

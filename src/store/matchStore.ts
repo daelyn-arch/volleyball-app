@@ -14,11 +14,30 @@ import type {
 import { DEFAULT_CONFIG } from '@/utils/scoring';
 import { isSetComplete, getSetWinner, isMatchComplete } from '@/utils/scoring';
 import { getSetScore, getSetsWon, getCurrentRotation } from './derived';
-import { getServer } from '@/utils/rotation';
+import { getServer, isFrontRow, findPlayerPosition, rotateLineup } from '@/utils/rotation';
 import { validateSubstitution, validateTimeout, validateLiberoReplacement } from './validators';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/** Find the original player that a libero replaced at a given position by tracing events backwards */
+function findLiberoOriginalPlayer(
+  events: MatchEvent[],
+  setIndex: number,
+  team: TeamSide,
+  liberoNumber: number,
+  _position: CourtPosition
+): number | null {
+  // Look backwards through events for the most recent liberoReplacement where this libero entered for this team
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.setIndex !== setIndex) continue;
+    if (e.type === 'liberoReplacement' && e.team === team && e.liberoNumber === liberoNumber && e.isLiberoEntering) {
+      return e.replacedPlayer;
+    }
+  }
+  return null;
 }
 
 function createEmptySetData(): SetData {
@@ -192,11 +211,48 @@ export const useMatchStore = create<MatchStore>()(
           awayScore: newAwayScore,
         };
 
-        const newEvents = [...state.events, event];
+        let newEvents = [...state.events, event];
 
         // Check if set is now complete
         const newScore = { home: newHomeScore, away: newAwayScore };
         const setWinner = getSetWinner(newScore, setIndex, state.config);
+
+        // Auto libero-out: if a sideout rotation would put a libero in the front row,
+        // automatically swap the libero out for the original player
+        if (!setWinner && scoringTeam !== rotation.servingTeam) {
+          // Sideout occurred — the scoring team rotates
+          const preRotationLineup = scoringTeam === 'home' ? { ...rotation.homeLineup } : { ...rotation.awayLineup };
+          const postRotationLineup = rotateLineup(preRotationLineup);
+          const teamData = scoringTeam === 'home' ? state.homeTeam : state.awayTeam;
+          const liberoNums = new Set(teamData.roster.filter(p => p.isLibero).map(p => p.number));
+
+          if (liberoNums.size > 0) {
+            // Check each front row position after rotation for a libero
+            for (let pos = 1; pos <= 6; pos++) {
+              const p = pos as CourtPosition;
+              if (isFrontRow(p) && liberoNums.has(postRotationLineup[p])) {
+                const liberoNumber = postRotationLineup[p];
+                // Find which player the libero originally replaced by looking back through events
+                const replacedPlayer = findLiberoOriginalPlayer(newEvents, setIndex, scoringTeam, liberoNumber, p);
+                if (replacedPlayer !== null) {
+                  const liberoEvent: MatchEvent = {
+                    type: 'liberoReplacement',
+                    id: generateId(),
+                    timestamp: Date.now(),
+                    setIndex,
+                    team: scoringTeam,
+                    liberoNumber,
+                    replacedPlayer,
+                    position: p,
+                    isLiberoEntering: false,
+                    autoSwap: true,
+                  };
+                  newEvents = [...newEvents, liberoEvent];
+                }
+              }
+            }
+          }
+        }
 
         let newMatchComplete: boolean = state.matchComplete;
         if (setWinner) {

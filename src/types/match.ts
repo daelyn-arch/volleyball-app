@@ -65,6 +65,7 @@ export interface LiberoReplacementEvent extends BaseEvent {
   replacedPlayer: number; // player coming off court
   position: CourtPosition; // must be back row (1, 5, 6)
   isLiberoEntering: boolean; // true = libero goes in, false = libero comes out
+  autoSwap?: boolean; // true if auto-generated when libero would rotate to front row
 }
 
 export interface SanctionEvent extends BaseEvent {

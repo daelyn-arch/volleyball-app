@@ -31,7 +31,7 @@ type SetSuffix = '' | '_2';
 type SidePrefix = 'Left' | 'Right';
 
 interface DrawInstruction {
-  shape: 'triangle' | 'circle';
+  shape: 'triangle' | 'circle' | 'tbar' | 'slash';
   fieldName?: string;          // resolve rect from form field
   rect?: { x: number; y: number; width: number; height: number }; // direct rect
   pageIndex?: number;          // page index when using direct rect
@@ -149,6 +149,40 @@ function drawCircleOnPage(
   });
 }
 
+/** Draw a bold forward slash through a field */
+function drawSlashOnPage(
+  page: PDFPage,
+  rect: { x: number; y: number; width: number; height: number }
+) {
+  const color = rgb(0, 0, 0);
+  const thickness = 1.25;
+  const inset = 2;
+  page.drawLine({
+    start: { x: rect.x + inset, y: rect.y + inset },
+    end: { x: rect.x + rect.width - inset, y: rect.y + rect.height - inset },
+    thickness,
+    color,
+  });
+}
+
+/** Draw a T-bar (horizontal line with vertical stem) to mark unused points */
+function drawTBarOnPage(
+  page: PDFPage,
+  rect: { x: number; y: number; width: number; height: number }
+) {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const color = rgb(0, 0, 0);
+  const thickness = 0.75;
+  const halfW = rect.width * 0.35;
+  const halfH = rect.height * 0.3;
+
+  // Horizontal top bar
+  page.drawLine({ start: { x: cx - halfW, y: cy + halfH }, end: { x: cx + halfW, y: cy + halfH }, thickness, color });
+  // Vertical stem
+  page.drawLine({ start: { x: cx, y: cy + halfH }, end: { x: cx, y: cy - halfH }, thickness, color });
+}
+
 // ── Libero Serving Detection ─────────────────────────────────
 
 /**
@@ -231,15 +265,29 @@ function fillTeamSetFields(
     }
   }
 
+  let maxPointScored = 0;
   for (const entry of teamScore) {
     if (entry.point >= 1 && entry.point <= 36) {
       const fieldName = `${sidePrefix}_${entry.point}${setSuffix}`;
       if (liberoServePoints.has(entry.point)) {
-        // Triangle only — no X text for libero-serve points
+        // Triangle only — no slash text for libero-serve points
         drawInstructions.push({ fieldName, shape: 'triangle' });
       } else {
-        safeSetField(form, fieldName, 'X');
+        drawInstructions.push({ fieldName, shape: 'slash' });
       }
+      if (entry.point > maxPointScored) maxPointScored = entry.point;
+    }
+  }
+
+  // T-bar unused points after the final scored point (only when set is complete)
+  const setScoreForTbar = getSetScore(state.events, setIndex);
+  const setWinnerForTbar = getSetWinner(setScoreForTbar, setIndex, state.config);
+  if (setWinnerForTbar && maxPointScored > 0) {
+    const otherTeamFinalScore = team === 'home' ? setScoreForTbar.away : setScoreForTbar.home;
+    // T-bar from maxPointScored+1 up to the opponent's final score
+    for (let p = maxPointScored + 1; p <= otherTeamFinalScore && p <= 36; p++) {
+      const fieldName = `${sidePrefix}_${p}${setSuffix}`;
+      drawInstructions.push({ fieldName, shape: 'tbar' });
     }
   }
 
@@ -308,9 +356,37 @@ function fillTeamSetFields(
     }
   }
 
-  // Circle the last service round entry (final score for this team)
-  if (lastSrFieldName) {
-    drawInstructions.push({ fieldName: lastSrFieldName, shape: 'circle' });
+  // Circle only when the set is complete
+  const setScore = getSetScore(state.events, setIndex);
+  const setWinner = getSetWinner(setScore, setIndex, state.config);
+  if (setWinner) {
+    // Check if this team's last service round was the set-ending round
+    // (i.e., the last round was by this team's server and they won)
+    const lastRound = teamRounds[teamRounds.length - 1];
+    const teamWonServing = lastRound &&
+      lastRound.servingTeam === team &&
+      setWinner === team &&
+      lastRound.endScore &&
+      (team === 'home' ? lastRound.endScore.home : lastRound.endScore.away) === (team === 'home' ? setScore.home : setScore.away);
+
+    if (teamWonServing && lastSrFieldName) {
+      // Team won on their own serve — circle the existing last entry
+      drawInstructions.push({ fieldName: lastSrFieldName, shape: 'circle' });
+    } else {
+      // Team lost the set on the other team's serve, or won on a side-out
+      // Place final score in the next empty serving round slot
+      const finalScore = team === 'home' ? setScore.home : setScore.away;
+      const nextCol = isReceivingTeam
+        ? ((teamRounds.length + 1) % 6) + 1
+        : (teamRounds.length % 6) + 1;
+      srRowByCol[nextCol]++;
+      const nextRow = srRowByCol[nextCol];
+      if (nextRow <= 6) {
+        const fieldName = `${srPrefix}_${nextCol}_score_service_round_${nextRow}${setSuffix}`;
+        safeSetField(form, fieldName, String(finalScore), TextAlignment.Center);
+        drawInstructions.push({ fieldName, shape: 'circle' });
+      }
+    }
   }
 
   // ── Substitutions ──
@@ -343,7 +419,7 @@ function fillTeamSetFields(
       const subField = `${sidePrefix}_${posCol}_${ordinal}_sub${setSuffix}`;
       const subScoreField = `${sidePrefix}_${posCol}_${ordinal}_sub_score${setSuffix}`;
       safeSetField(form, subField, String(sub.playerIn), TextAlignment.Center);
-      safeSetField(form, subScoreField, `${sub.homeScore}-${sub.awayScore}`, TextAlignment.Center);
+      safeSetField(form, subScoreField, `${sub.homeScore} ${sub.awayScore}`, TextAlignment.Center);
     }
   }
 
@@ -359,7 +435,7 @@ function fillTeamSetFields(
     safeSetField(
       form,
       `${sidePrefix}_timeout_${to.timeoutNumber}${setSuffix}`,
-      `${to.homeScore}-${to.awayScore}`,
+      `${to.homeScore} ${to.awayScore}`,
       TextAlignment.Center
     );
   }
@@ -488,7 +564,7 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
   const resolvedShapes: Array<{
     pageIndex: number;
     rect: { x: number; y: number; width: number; height: number };
-    shape: 'triangle' | 'circle';
+    shape: 'triangle' | 'circle' | 'tbar' | 'slash';
   }> = [];
 
   for (const instr of drawInstructions) {
@@ -539,8 +615,12 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
     const page = pages[s.pageIndex] || pages[0];
     if (s.shape === 'triangle') {
       drawTriangleOnPage(page, s.rect);
-    } else {
+    } else if (s.shape === 'circle') {
       drawCircleOnPage(page, s.rect);
+    } else if (s.shape === 'tbar') {
+      drawTBarOnPage(page, s.rect);
+    } else if (s.shape === 'slash') {
+      drawSlashOnPage(page, s.rect);
     }
   }
 

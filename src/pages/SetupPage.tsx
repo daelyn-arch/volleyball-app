@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
-import type { Team, MatchMetadata, Lineup } from '@/types/match';
+import type { Team, MatchMetadata, Lineup, TeamSide } from '@/types/match';
 
 export default function SetupPage() {
   const navigate = useNavigate();
@@ -223,16 +223,164 @@ export default function SetupPage() {
           Set Lineups
         </button>
 
-        <button
-          type="button"
-          onClick={handleDemo}
-          className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium py-3 rounded-xl transition-colors"
-        >
-          Demo Match
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleDemo}
+            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium py-3 rounded-xl transition-colors"
+          >
+            Demo Match
+          </button>
+          <button
+            type="button"
+            onClick={handleRandomGame}
+            className="flex-1 bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium py-3 rounded-xl transition-colors"
+          >
+            Random Game
+          </button>
+        </div>
       </form>
     </div>
   );
+
+  function handleRandomGame() {
+    // Set up the demo match inline (don't call handleDemo which navigates)
+    const homeTeam: Team = {
+      name: 'CSUSM',
+      roster: [
+        { number: 1, isCaptain: true }, { number: 2 }, { number: 3 },
+        { number: 4 }, { number: 5 }, { number: 6 },
+        { number: 7 }, { number: 8 }, { number: 9 },
+        { number: 10, isLibero: true },
+      ],
+    };
+    const awayTeam: Team = {
+      name: 'SDSU',
+      roster: [
+        { number: 11, isCaptain: true }, { number: 12 }, { number: 13 },
+        { number: 14 }, { number: 15 }, { number: 16 },
+        { number: 17 }, { number: 18 }, { number: 19 },
+        { number: 20, isLibero: true },
+      ],
+    };
+    const store = useMatchStore.getState();
+    store.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
+      competition: 'CCAA Conference', cityState: 'San Marcos, CA',
+      hall: 'The Sports Center', matchNumber: '101', level: 'D2',
+      division: 'Women', category: 'Adult', poolPhase: 'Pool A',
+      court: '1', scorer: 'Jane Smith', referee: 'John Doe', downRef: 'Mike Lee',
+    });
+    const homeLineup0: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
+    const awayLineup0: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
+    store.setLineup(0, 'home', homeLineup0);
+    store.setLineup(0, 'away', awayLineup0);
+    store.setFirstServe(0, 'home');
+
+    // Now simulate random gameplay
+    const bestOf = 3;
+    const setsToPlay = Math.random() < 0.5 ? 2 : 3; // 2 sets (sweep) or 3 sets
+
+    for (let setNum = 0; setNum < setsToPlay; setNum++) {
+      if (setNum > 0) {
+        // Advance to next set and set lineups
+        store.advanceToNextSet();
+        const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
+        const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
+        store.setLineup(setNum, 'home', homeLineup);
+        store.setLineup(setNum, 'away', awayLineup);
+        store.setFirstServe(setNum, setNum % 2 === 0 ? 'home' : 'away');
+      }
+
+      // Determine target scores for this set
+      const isDeciding = setNum === 2;
+      const maxPts = isDeciding ? 15 : 25;
+      let homeTarget: number, awayTarget: number;
+
+      if (setNum < 2) {
+        // First two sets: alternate winner or random
+        const homeWins = setNum === 0 ? Math.random() < 0.6 : (setsToPlay === 3 ? !true : Math.random() < 0.6);
+        if (setsToPlay === 2) {
+          // Sweep: same team wins both
+          homeTarget = maxPts;
+          awayTarget = Math.floor(Math.random() * 10) + 15; // 15-24
+        } else {
+          // 3 sets: each team wins one of the first two
+          if (setNum === 0) {
+            homeTarget = maxPts;
+            awayTarget = Math.floor(Math.random() * 10) + 15;
+          } else {
+            awayTarget = maxPts;
+            homeTarget = Math.floor(Math.random() * 10) + 15;
+          }
+        }
+      } else {
+        // Deciding set
+        const homeWinsDecider = Math.random() < 0.5;
+        if (homeWinsDecider) {
+          homeTarget = maxPts;
+          awayTarget = Math.floor(Math.random() * 5) + 10; // 10-14
+        } else {
+          awayTarget = maxPts;
+          homeTarget = Math.floor(Math.random() * 5) + 10;
+        }
+      }
+
+      // Ensure at least 2-point lead if close
+      if (Math.abs(homeTarget - awayTarget) < 2 && (homeTarget >= maxPts || awayTarget >= maxPts)) {
+        if (homeTarget > awayTarget) awayTarget = homeTarget - 2;
+        else homeTarget = awayTarget - 2;
+      }
+
+      // Simulate points in random order, with occasional subs/timeouts
+      const totalPoints = homeTarget + awayTarget;
+      let homeScored = 0;
+      let awayScored = 0;
+      const subsDone: Record<string, number> = { home: 0, away: 0 };
+      const tosDone: Record<string, number> = { home: 0, away: 0 };
+
+      // Create a shuffled sequence of which team scores each point
+      const sequence: TeamSide[] = [];
+      for (let i = 0; i < homeTarget; i++) sequence.push('home');
+      for (let i = 0; i < awayTarget; i++) sequence.push('away');
+      // Shuffle all but the last point (winner must score last)
+      const lastPoint = sequence[sequence.length - 1];
+      const rest = sequence.slice(0, -1);
+      for (let i = rest.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rest[i], rest[j]] = [rest[j], rest[i]];
+      }
+      rest.push(lastPoint);
+
+      for (const team of rest) {
+        // Random timeout (~5% chance, max 2 per team)
+        const toTeam: TeamSide = Math.random() < 0.5 ? 'home' : 'away';
+        if (Math.random() < 0.05 && tosDone[toTeam] < 2) {
+          store.recordTimeout(toTeam);
+          tosDone[toTeam]++;
+        }
+
+        // Random substitution (~8% chance, max a few per set)
+        if (Math.random() < 0.08 && subsDone.home < 4) {
+          const benchPlayers = [7, 8, 9];
+          const available = benchPlayers.filter(n => {
+            // Check not already on court by just trying
+            return true;
+          });
+          if (available.length > 0) {
+            const pin = available[Math.floor(Math.random() * available.length)];
+            const courtPlayers = [1, 2, 3, 4, 5, 6];
+            const pout = courtPlayers[Math.floor(Math.random() * courtPlayers.length)];
+            store.recordSubstitution('home', pin, pout);
+            subsDone.home++;
+          }
+        }
+
+        store.awardPoint(team);
+      }
+    }
+
+    navigate('/scoring');
+  }
 
   function handleDemo() {
     const homeTeam: Team = {
@@ -266,8 +414,8 @@ export default function SetupPage() {
       ],
     };
 
-    const store = useMatchStore.getState();
-    store.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
+    const demoStore = useMatchStore.getState();
+    demoStore.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
       competition: 'CCAA Conference',
       cityState: 'San Marcos, CA',
       hall: 'The Sports Center',
@@ -285,9 +433,9 @@ export default function SetupPage() {
     const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
     const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
 
-    store.setLineup(0, 'home', homeLineup);
-    store.setLineup(0, 'away', awayLineup);
-    store.setFirstServe(0, 'home');
+    demoStore.setLineup(0, 'home', homeLineup);
+    demoStore.setLineup(0, 'away', awayLineup);
+    demoStore.setFirstServe(0, 'home');
 
     navigate('/scoring');
   }
