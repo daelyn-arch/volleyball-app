@@ -56,8 +56,23 @@ export default function LineupPage() {
   const [awayBench, setAwayBench] = useState('');
   const [homeLiberos, setHomeLiberos] = useState('');
   const [awayLiberos, setAwayLiberos] = useState('');
+  const [homeCaptain, setHomeCaptain] = useState('');
+  const [awayCaptain, setAwayCaptain] = useState('');
+  const [homeActingCaptain, setHomeActingCaptain] = useState('');
+  const [awayActingCaptain, setAwayActingCaptain] = useState('');
   const [firstServeTeam, setFirstServeTeam] = useState<TeamSide>('home');
   const [error, setError] = useState('');
+
+  // Check if captain is in the lineup
+  function isCaptainInLineup(inputs: Record<CourtPosition, string>, captainStr: string): boolean {
+    const capNum = parseNumber(captainStr.trim());
+    if (!capNum) return true; // no captain entered, no issue
+    const lineupNums = Object.values(inputs).map(v => parseNumber(v)).filter(Boolean);
+    return lineupNums.includes(capNum);
+  }
+
+  const homeCaptainInLineup = isCaptainInLineup(homeInputs, homeCaptain);
+  const awayCaptainInLineup = isCaptainInLineup(awayInputs, awayCaptain);
 
   function updateInput(
     team: 'home' | 'away',
@@ -86,9 +101,13 @@ export default function LineupPage() {
   function buildRoster(
     lineup: Lineup,
     benchStr: string,
-    liberoStr: string
+    liberoStr: string,
+    captainStr: string,
+    actingCaptainStr: string
   ): Player[] {
     const liberoNums = new Set(parseNumberList(liberoStr));
+    const captainNum = parseNumber(captainStr.trim());
+    const actingCaptainNum = parseNumber(actingCaptainStr.trim());
     const benchNums = parseNumberList(benchStr);
     const allNums = new Set<number>();
     const roster: Player[] = [];
@@ -98,7 +117,12 @@ export default function LineupPage() {
       const num = lineup[pos as CourtPosition];
       if (!allNums.has(num)) {
         allNums.add(num);
-        roster.push({ number: num, isLibero: liberoNums.has(num) });
+        roster.push({
+          number: num,
+          isLibero: liberoNums.has(num),
+          isCaptain: num === captainNum,
+          isActingCaptain: num === actingCaptainNum,
+        });
       }
     }
 
@@ -106,7 +130,12 @@ export default function LineupPage() {
     for (const num of benchNums) {
       if (!allNums.has(num)) {
         allNums.add(num);
-        roster.push({ number: num, isLibero: liberoNums.has(num) });
+        roster.push({
+          number: num,
+          isLibero: liberoNums.has(num),
+          isCaptain: num === captainNum,
+          isActingCaptain: num === actingCaptainNum,
+        });
       }
     }
 
@@ -114,7 +143,7 @@ export default function LineupPage() {
     for (const num of liberoNums) {
       if (!allNums.has(num)) {
         allNums.add(num);
-        roster.push({ number: num, isLibero: true });
+        roster.push({ number: num, isLibero: true, isCaptain: num === captainNum });
       }
     }
 
@@ -148,9 +177,19 @@ export default function LineupPage() {
       return;
     }
 
-    // Build rosters from lineup + bench + liberos
-    const homeRoster = buildRoster(homeLineup, homeBench, homeLiberos);
-    const awayRoster = buildRoster(awayLineup, awayBench, awayLiberos);
+    // Validate acting captain if captain is not in lineup
+    if (homeCaptain && !homeCaptainInLineup && !homeActingCaptain) {
+      setError(homeTeam.name + ': captain #' + homeCaptain + ' is not in the lineup — select an acting captain');
+      return;
+    }
+    if (awayCaptain && !awayCaptainInLineup && !awayActingCaptain) {
+      setError(awayTeam.name + ': captain #' + awayCaptain + ' is not in the lineup — select an acting captain');
+      return;
+    }
+
+    // Build rosters from lineup + bench + liberos + captain
+    const homeRoster = buildRoster(homeLineup, homeBench, homeLiberos, homeCaptain, homeActingCaptain);
+    const awayRoster = buildRoster(awayLineup, awayBench, awayLiberos, awayCaptain, awayActingCaptain);
 
     // Update team rosters in store
     useMatchStore.setState({
@@ -231,6 +270,70 @@ export default function LineupPage() {
             className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
+
+        {/* Captain */}
+        <div className="mt-2">
+          <label className="block text-xs text-slate-400 mb-1">
+            Captain
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="e.g. 5"
+            value={team === 'home' ? homeCaptain : awayCaptain}
+            onChange={(e) => {
+              const cleaned = e.target.value.replace(/\D/g, '');
+              if (team === 'home') {
+                setHomeCaptain(cleaned);
+                setHomeActingCaptain('');
+              } else {
+                setAwayCaptain(cleaned);
+                setAwayActingCaptain('');
+              }
+            }}
+            className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            maxLength={3}
+          />
+        </div>
+
+        {/* Acting Captain - shown when captain is not in lineup */}
+        {(() => {
+          const captainStr = team === 'home' ? homeCaptain : awayCaptain;
+          const captainInLineup = team === 'home' ? homeCaptainInLineup : awayCaptainInLineup;
+          const actingCaptain = team === 'home' ? homeActingCaptain : awayActingCaptain;
+          const setActing = team === 'home' ? setHomeActingCaptain : setAwayActingCaptain;
+
+          if (!captainStr || captainInLineup) return null;
+
+          // Get lineup player numbers for selection
+          const lineupNums = Object.values(inputs)
+            .map(v => parseNumber(v))
+            .filter((n): n is number => n !== null);
+
+          return (
+            <div className="mt-2">
+              <label className="block text-xs text-yellow-400 mb-1">
+                Acting Captain (#{captainStr} not in lineup)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {lineupNums.map(num => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setActing(String(num))}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+                      actingCaptain === String(num)
+                        ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    #{num}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }

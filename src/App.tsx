@@ -6,6 +6,7 @@ import ScoringPage from './pages/ScoringPage';
 import BetweenSetsPage from './pages/BetweenSetsPage';
 import ScoresheetViewPage from './pages/ScoresheetViewPage';
 import CalibrationPage from './pages/CalibrationPage';
+import InspectOverlay from './components/InspectOverlay';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/scoresheet" element={<ScoresheetViewPage />} />
         <Route path="/calibrate" element={<CalibrationPage />} />
       </Routes>
+      <InspectOverlay />
     </div>
   );
 }

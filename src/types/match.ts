@@ -4,6 +4,8 @@ export interface Player {
   number: number;
   name?: string;
   isLibero?: boolean;
+  isCaptain?: boolean;
+  isActingCaptain?: boolean;
 }
 
 export interface Team {
@@ -89,6 +91,25 @@ export interface SetData {
   firstServe: TeamSide | null;
   /** Which team started on which side (left/right) */
   homeBenchSide: 'left' | 'right';
+  startTime: number | null;
+  endTime: number | null;
+}
+
+// ── Match Metadata (optional, for PDF) ───────────────────
+
+export interface MatchMetadata {
+  competition: string;
+  cityState: string;
+  hall: string;
+  matchNumber: string;
+  level: string;
+  division: 'Men' | 'Women' | 'CoEd' | '';
+  category: 'Adult' | 'Junior' | '';
+  poolPhase: string;
+  court: string;
+  scorer: string;
+  referee: string;
+  downRef: string;
 }
 
 // ── Match ─────────────────────────────────────────────────
@@ -111,8 +132,12 @@ export interface MatchState {
   events: MatchEvent[];
   currentSetIndex: number;
   matchComplete: boolean;
+  /** Optional match metadata for PDF */
+  metadata: MatchMetadata;
   /** Track libero serving rotation per set. Key: `${setIndex}-${team}`, value: position */
   liberoServingPositions: Record<string, CourtPosition | null>;
+  /** Score correction remarks for the PDF */
+  remarks: string[];
 }
 
 // ── Derived types ─────────────────────────────────────────

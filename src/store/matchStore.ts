@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type {
   MatchState,
   MatchConfig,
+  MatchMetadata,
   Team,
   Lineup,
   TeamSide,
@@ -26,18 +27,22 @@ function createEmptySetData(): SetData {
     awayLineup: null,
     firstServe: null,
     homeBenchSide: 'left',
+    startTime: null,
+    endTime: null,
   };
 }
 
 interface MatchActions {
   // Setup
-  createMatch: (homeTeam: Team, awayTeam: Team, config?: Partial<MatchConfig>) => void;
+  createMatch: (homeTeam: Team, awayTeam: Team, config?: Partial<MatchConfig>, metadata?: Partial<MatchMetadata>) => void;
+  updateMetadata: (metadata: Partial<MatchMetadata>) => void;
   setLineup: (setIndex: number, team: TeamSide, lineup: Lineup) => void;
   setFirstServe: (setIndex: number, team: TeamSide) => void;
   setBenchSide: (setIndex: number, side: 'left' | 'right') => void;
 
   // Scoring
   awardPoint: (scoringTeam: TeamSide) => void;
+  decrementPoint: (team: TeamSide) => void;
 
   // Substitutions
   recordSubstitution: (team: TeamSide, playerIn: number, playerOut: number) => string | null;
@@ -60,11 +65,29 @@ interface MatchActions {
   // Navigation
   advanceToNextSet: () => void;
 
+  // Roster
+  addPlayerToRoster: (team: TeamSide, playerNumber: number) => void;
+
   // Reset
   resetMatch: () => void;
 }
 
 export type MatchStore = MatchState & MatchActions;
+
+const EMPTY_METADATA: MatchMetadata = {
+  competition: '',
+  cityState: '',
+  hall: '',
+  matchNumber: '',
+  level: '',
+  division: '',
+  category: '',
+  poolPhase: '',
+  court: '',
+  scorer: '',
+  referee: '',
+  downRef: '',
+};
 
 const initialState: MatchState = {
   id: '',
@@ -76,7 +99,9 @@ const initialState: MatchState = {
   events: [],
   currentSetIndex: 0,
   matchComplete: false,
+  metadata: { ...EMPTY_METADATA },
   liberoServingPositions: {},
+  remarks: [],
 };
 
 export const useMatchStore = create<MatchStore>()(
@@ -84,7 +109,7 @@ export const useMatchStore = create<MatchStore>()(
     (set, get) => ({
       ...initialState,
 
-      createMatch: (homeTeam, awayTeam, config) => {
+      createMatch: (homeTeam, awayTeam, config, metadata) => {
         const matchConfig = { ...DEFAULT_CONFIG, ...config };
         const sets: SetData[] = [];
         for (let i = 0; i < matchConfig.bestOf; i++) {
@@ -100,8 +125,16 @@ export const useMatchStore = create<MatchStore>()(
           events: [],
           currentSetIndex: 0,
           matchComplete: false,
+          metadata: { ...EMPTY_METADATA, ...metadata },
           liberoServingPositions: {},
+          remarks: [],
         });
+      },
+
+      updateMetadata: (metadata) => {
+        set((state) => ({
+          metadata: { ...state.metadata, ...metadata },
+        }));
       },
 
       setLineup: (setIndex, team, lineup) => {
@@ -171,7 +204,84 @@ export const useMatchStore = create<MatchStore>()(
           newMatchComplete = isMatchComplete(setsWon, state.config);
         }
 
-        set({ events: newEvents, matchComplete: newMatchComplete });
+        // Track set start/end times
+        const sets = [...state.sets];
+        const setData = sets[setIndex];
+        let setsUpdated = false;
+
+        // First point of the set → record start time
+        if (currentScore.home === 0 && currentScore.away === 0) {
+          sets[setIndex] = { ...setData, startTime: Date.now() };
+          setsUpdated = true;
+        }
+
+        // Set just completed → record end time
+        if (setWinner) {
+          sets[setIndex] = { ...(setsUpdated ? sets[setIndex] : setData), endTime: Date.now() };
+          setsUpdated = true;
+        }
+
+        set({
+          events: newEvents,
+          matchComplete: newMatchComplete,
+          ...(setsUpdated ? { sets } : {}),
+        });
+      },
+
+      decrementPoint: (team) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+
+        // Find the last point event for this team in the current set
+        let removeIdx = -1;
+        for (let i = state.events.length - 1; i >= 0; i--) {
+          const e = state.events[i];
+          if (e.setIndex === setIndex && e.type === 'point' && e.scoringTeam === team) {
+            removeIdx = i;
+            break;
+          }
+        }
+        if (removeIdx === -1) return; // nothing to remove
+
+        const removedEvent = state.events[removeIdx];
+        const removedScore = team === 'home'
+          ? (removedEvent as any).homeScore
+          : (removedEvent as any).awayScore;
+
+        // Build new events: remove the point, adjust subsequent scores
+        const newEvents: MatchEvent[] = [];
+        for (let i = 0; i < state.events.length; i++) {
+          if (i === removeIdx) continue;
+
+          const e = state.events[i];
+          if (i > removeIdx && e.setIndex === setIndex) {
+            // Decrement the corrected team's score in all subsequent events
+            if (e.type === 'point' || e.type === 'substitution' || e.type === 'timeout' || e.type === 'sanction') {
+              const adjusted = { ...e };
+              if (team === 'home') adjusted.homeScore--;
+              else adjusted.awayScore--;
+              newEvents.push(adjusted);
+              continue;
+            }
+          }
+          newEvents.push(e);
+        }
+
+        // Recalculate match state
+        const newScore = getSetScore(newEvents, setIndex);
+        const setWinner = getSetWinner(newScore, setIndex, state.config);
+
+        // Add remark per USAV format: What happened, Team, Set # and Score
+        const teamName = team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+        const remarks = [...(state.remarks || [])];
+        remarks.push(`PTS REMOVED, ${teamName}, Set ${setIndex + 1}, ${newScore.home}-${newScore.away}`);
+        let newMatchComplete = false;
+        if (setWinner) {
+          const setsWon = getSetsWon({ ...state, events: newEvents });
+          newMatchComplete = isMatchComplete(setsWon, state.config);
+        }
+
+        set({ events: newEvents, matchComplete: newMatchComplete, remarks });
       },
 
       recordSubstitution: (team, playerIn, playerOut) => {
@@ -284,6 +394,21 @@ export const useMatchStore = create<MatchStore>()(
         };
 
         set({ currentSetIndex: nextSetIndex, sets });
+      },
+
+      addPlayerToRoster: (team, playerNumber) => {
+        set((state) => {
+          const teamKey = team === 'home' ? 'homeTeam' : 'awayTeam';
+          const teamData = state[teamKey];
+          // Don't add if already on roster
+          if (teamData.roster.some((p) => p.number === playerNumber)) return {};
+          return {
+            [teamKey]: {
+              ...teamData,
+              roster: [...teamData.roster, { number: playerNumber }],
+            },
+          };
+        });
       },
 
       resetMatch: () => {

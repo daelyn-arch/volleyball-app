@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
-import type { Team } from '@/types/match';
+import type { Team, MatchMetadata } from '@/types/match';
 
 export default function SetupPage() {
   const navigate = useNavigate();
@@ -11,6 +11,20 @@ export default function SetupPage() {
   const [awayName, setAwayName] = useState('');
   const [bestOf, setBestOf] = useState<3 | 5>(5);
   const [error, setError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
+
+  const [competition, setCompetition] = useState('');
+  const [cityState, setCityState] = useState('');
+  const [hall, setHall] = useState('');
+  const [matchNumber, setMatchNumber] = useState('');
+  const [level, setLevel] = useState('');
+  const [division, setDivision] = useState<MatchMetadata['division']>('');
+  const [category, setCategory] = useState<MatchMetadata['category']>('');
+  const [poolPhase, setPoolPhase] = useState('');
+  const [court, setCourt] = useState('');
+  const [scorer, setScorer] = useState('');
+  const [referee, setReferee] = useState('');
+  const [downRef, setDownRef] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,9 +38,24 @@ export default function SetupPage() {
     const homeTeam: Team = { name: homeName.trim(), roster: [] };
     const awayTeam: Team = { name: awayName.trim(), roster: [] };
 
-    createMatch(homeTeam, awayTeam, { bestOf });
+    createMatch(homeTeam, awayTeam, { bestOf }, {
+      competition: competition.trim(),
+      cityState: cityState.trim(),
+      hall: hall.trim(),
+      matchNumber: matchNumber.trim(),
+      level: level.trim(),
+      division,
+      category,
+      poolPhase: poolPhase.trim(),
+      court: court.trim(),
+      scorer: scorer.trim(),
+      referee: referee.trim(),
+      downRef: downRef.trim(),
+    });
     navigate('/lineup/0');
   }
+
+  const inputClass = 'w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
   return (
     <div className="min-h-full p-6 max-w-2xl mx-auto">
@@ -85,6 +114,100 @@ export default function SetupPage() {
               className="w-full bg-slate-700 text-white rounded-lg px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+        </div>
+
+        {/* Match Details (optional, collapsible) */}
+        <div className="bg-slate-800 rounded-xl border border-slate-700">
+          <button
+            type="button"
+            onClick={() => setShowDetails(!showDetails)}
+            className="w-full flex items-center justify-between px-4 py-3 text-slate-300 hover:text-white transition-colors"
+          >
+            <span className="text-sm font-medium">Match Details (optional)</span>
+            <span className="text-lg">{showDetails ? '\u25B2' : '\u25BC'}</span>
+          </button>
+
+          {showDetails && (
+            <div className="px-4 pb-4 grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-slate-400 mb-1">Competition</label>
+                <input type="text" placeholder="Name of the Competition" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">City, State</label>
+                <input type="text" placeholder="City, State" value={cityState} onChange={(e) => setCityState(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Hall</label>
+                <input type="text" placeholder="Hall / Venue" value={hall} onChange={(e) => setHall(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Match #</label>
+                <input type="text" placeholder="Match Number" value={matchNumber} onChange={(e) => setMatchNumber(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Court</label>
+                <input type="text" placeholder="Court" value={court} onChange={(e) => setCourt(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Level</label>
+                <input type="text" placeholder="Level" value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Pool / Phase</label>
+                <input type="text" placeholder="Pool Phase" value={poolPhase} onChange={(e) => setPoolPhase(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Division</label>
+                <div className="flex gap-2">
+                  {(['Men', 'Women', 'CoEd'] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDivision(division === d ? '' : d)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        division === d ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Category</label>
+                <div className="flex gap-2">
+                  {(['Adult', 'Junior'] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategory(category === c ? '' : c)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        category === c ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="col-span-2 border-t border-slate-700 pt-3 mt-1">
+                <label className="block text-xs text-slate-400 mb-2 font-medium">Officials</label>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Scorer</label>
+                <input type="text" placeholder="Match Scorer" value={scorer} onChange={(e) => setScorer(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">1st Referee</label>
+                <input type="text" placeholder="1st Referee" value={referee} onChange={(e) => setReferee(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Down Referee</label>
+                <input type="text" placeholder="Down Ref" value={downRef} onChange={(e) => setDownRef(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (
