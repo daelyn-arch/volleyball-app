@@ -22,9 +22,20 @@ export default function TimeoutButton({ team, count, max, disabled }: Props) {
     <button
       onClick={handleClick}
       disabled={disabled || count >= max}
-      className="bg-amber-700 hover:bg-amber-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+      className="flex items-center gap-1 bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 text-white text-xs font-semibold px-2 py-1 rounded-md transition-colors touch-manipulation"
     >
-      T/O ({count}/{max})
+      <span>T/O</span>
+      <span className="flex flex-col gap-0.5">
+        {Array.from({ length: max }, (_, i) => (
+          <span
+            key={i}
+            style={{ width: '5px', height: '5px' }}
+            className={`block rounded-full ${
+              i < count ? 'bg-slate-500' : 'bg-yellow-400'
+            }`}
+          />
+        ))}
+      </span>
     </button>
   );
 }

@@ -81,6 +81,6 @@ export const DEFAULT_CONFIG: MatchConfig = {
   bestOf: 5,
   pointsToWin: 25,
   decidingSetPoints: 15,
-  maxSubsPerSet: 6,
+  maxSubsPerSet: 15,
   maxTimeoutsPerSet: 2,
 };

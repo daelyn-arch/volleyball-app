@@ -7,15 +7,16 @@ import type { TeamSide } from '@/types/match';
 interface Props {
   team: TeamSide;
   onClose: () => void;
+  preSelectedOut?: number | null;
 }
 
-export default function SubstitutionDialog({ team, onClose }: Props) {
+export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Props) {
   const state = useMatchStore();
   const { homeTeam, awayTeam, recordSubstitution, addPlayerToRoster } = state;
   const teamData = team === 'home' ? homeTeam : awayTeam;
   const rotation = getCurrentRotation(state, state.currentSetIndex);
 
-  const [playerOut, setPlayerOut] = useState<number | null>(null);
+  const [playerOut, setPlayerOut] = useState<number | null>(preSelectedOut ?? null);
   const [playerIn, setPlayerIn] = useState<number | null>(null);
   const [playerInInput, setPlayerInInput] = useState('');
   const [showAddPrompt, setShowAddPrompt] = useState<number | null>(null);
@@ -132,25 +133,32 @@ export default function SubstitutionDialog({ team, onClose }: Props) {
           </div>
         ) : (
           <>
-            {/* Player Out */}
-            <div className="mb-4">
-              <label className="block text-sm text-slate-400 mb-2">Player OUT (on court)</label>
-              <div className="grid grid-cols-4 gap-2">
-                {eligibleOut.map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => handleSelectOut(num)}
-                    className={`py-2 rounded-lg text-base font-bold transition-colors ${
-                      playerOut === num
-                        ? 'bg-orange-600 text-white'
-                        : 'bg-slate-700 text-white hover:bg-slate-600'
-                    }`}
-                  >
-                    #{num}
-                  </button>
-                ))}
+            {/* Player Out - hidden when pre-selected from rotation grid */}
+            {preSelectedOut != null ? (
+              <div className="mb-4">
+                <label className="block text-sm text-slate-400 mb-1">Player OUT</label>
+                <span className="text-lg font-bold text-orange-400">#{preSelectedOut}</span>
               </div>
-            </div>
+            ) : (
+              <div className="mb-4">
+                <label className="block text-sm text-slate-400 mb-2">Player OUT (on court)</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {eligibleOut.map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => handleSelectOut(num)}
+                      className={`py-2 rounded-lg text-base font-bold transition-colors ${
+                        playerOut === num
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-slate-700 text-white hover:bg-slate-600'
+                      }`}
+                    >
+                      #{num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Player In */}
             <div className="mb-4">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
-import type { Team, MatchMetadata } from '@/types/match';
+import type { Team, MatchMetadata, Lineup } from '@/types/match';
 
 export default function SetupPage() {
   const navigate = useNavigate();
@@ -9,7 +9,7 @@ export default function SetupPage() {
 
   const [homeName, setHomeName] = useState('');
   const [awayName, setAwayName] = useState('');
-  const [bestOf, setBestOf] = useState<3 | 5>(5);
+  const [bestOf, setBestOf] = useState<3 | 5>(3);
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -222,7 +222,73 @@ export default function SetupPage() {
         >
           Set Lineups
         </button>
+
+        <button
+          type="button"
+          onClick={handleDemo}
+          className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium py-3 rounded-xl transition-colors"
+        >
+          Demo Match
+        </button>
       </form>
     </div>
   );
+
+  function handleDemo() {
+    const homeTeam: Team = {
+      name: 'CSUSM',
+      roster: [
+        { number: 1, isCaptain: true },
+        { number: 2 },
+        { number: 3 },
+        { number: 4 },
+        { number: 5 },
+        { number: 6 },
+        { number: 7 },
+        { number: 8 },
+        { number: 9 },
+        { number: 10, isLibero: true },
+      ],
+    };
+    const awayTeam: Team = {
+      name: 'SDSU',
+      roster: [
+        { number: 11, isCaptain: true },
+        { number: 12 },
+        { number: 13 },
+        { number: 14 },
+        { number: 15 },
+        { number: 16 },
+        { number: 17 },
+        { number: 18 },
+        { number: 19 },
+        { number: 20, isLibero: true },
+      ],
+    };
+
+    const store = useMatchStore.getState();
+    store.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
+      competition: 'CCAA Conference',
+      cityState: 'San Marcos, CA',
+      hall: 'The Sports Center',
+      matchNumber: '101',
+      level: 'D2',
+      division: 'Women',
+      category: 'Adult',
+      poolPhase: 'Pool A',
+      court: '1',
+      scorer: 'Jane Smith',
+      referee: 'John Doe',
+      downRef: 'Mike Lee',
+    });
+
+    const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
+    const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
+
+    store.setLineup(0, 'home', homeLineup);
+    store.setLineup(0, 'away', awayLineup);
+    store.setFirstServe(0, 'home');
+
+    navigate('/scoring');
+  }
 }

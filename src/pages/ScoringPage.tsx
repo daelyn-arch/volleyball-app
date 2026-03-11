@@ -27,7 +27,7 @@ export default function ScoringPage() {
     advanceToNextSet,
   } = state;
 
-  const [showSubDialog, setShowSubDialog] = useState<'home' | 'away' | null>(null);
+  const [showSubDialog, setShowSubDialog] = useState<{ team: TeamSide; playerOut?: number } | null>(null);
   const [showLiberoPanel, setShowLiberoPanel] = useState<'home' | 'away' | null>(null);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
 
@@ -44,6 +44,8 @@ export default function ScoringPage() {
 
   const hasLiberoHome = homeTeam.roster.some((p) => p.isLibero);
   const hasLiberoAway = awayTeam.roster.some((p) => p.isLibero);
+  const homeLiberoNums = new Set(homeTeam.roster.filter((p) => p.isLibero).map((p) => p.number));
+  const awayLiberoNums = new Set(awayTeam.roster.filter((p) => p.isLibero).map((p) => p.number));
 
   const homeServing = rotation?.servingTeam === 'home';
   const awayServing = rotation?.servingTeam === 'away';
@@ -77,73 +79,46 @@ export default function ScoringPage() {
         </div>
       </div>
 
-      {/* Scores + Serve Indicator */}
-      <div data-name="score-row" className="flex items-center justify-center py-3 shrink-0">
-        <div data-name="score-group" className="relative flex items-center gap-3">
-          <div data-name="home-score" className="bg-blue-900 border-2 border-blue-500 rounded-lg px-5 py-2 min-w-[64px] text-center">
-            <span className="text-4xl font-bold text-white tabular-nums">{score.home}</span>
-          </div>
-          <div data-name="away-score" className="bg-red-900 border-2 border-red-500 rounded-lg px-5 py-2 min-w-[64px] text-center">
-            <span className="text-4xl font-bold text-white tabular-nums">{score.away}</span>
-          </div>
-          {/* Serve indicator positioned absolutely outside the scores */}
-          {rotation && homeServing && (
-            <div data-name="home-serve-indicator" className="absolute right-full mr-3 flex items-center gap-1.5 text-yellow-400">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
-                <circle cx="10" cy="10" r="3" />
-              </svg>
-              <span className="text-sm font-semibold whitespace-nowrap">#{rotation.serverNumber}</span>
-            </div>
-          )}
-          {rotation && awayServing && (
-            <div data-name="away-serve-indicator" className="absolute left-full ml-3 flex items-center gap-1.5 text-yellow-400">
-              <span className="text-sm font-semibold whitespace-nowrap">#{rotation.serverNumber}</span>
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
-                <circle cx="10" cy="10" r="3" />
-              </svg>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Main Area: Two Team Panels Side by Side */}
-      <div data-name="panels-container" className="flex-1 flex justify-center gap-4 px-4 pb-3 min-h-0">
+      <div data-name="panels-container" className="flex-1 flex justify-center gap-3 px-3 min-h-0">
         {/* Home Team Panel */}
         <TeamPanel
           teamName={homeTeam.name}
           teamSide="home"
+          teamScore={score.home}
           lineup={rotation?.homeLineup ?? null}
           isServing={homeServing}
           setComplete={setComplete}
-          subCount={homeSubCount}
-          maxSubs={config.maxSubsPerSet}
           timeoutCount={homeTimeoutCount}
           maxTimeouts={config.maxTimeoutsPerSet}
+          subCount={homeSubCount}
+          maxSubs={config.maxSubsPerSet}
           hasLibero={hasLiberoHome}
+          liberoNums={homeLiberoNums}
           onPoint={() => awardPoint('home')}
           onDecrement={() => decrementPoint('home')}
-          onSub={() => setShowSubDialog('home')}
           onLibero={() => setShowLiberoPanel('home')}
+          onSubPlayer={(playerOut) => setShowSubDialog({ team: 'home', playerOut })}
         />
 
         {/* Away Team Panel */}
         <TeamPanel
           teamName={awayTeam.name}
           teamSide="away"
+          teamScore={score.away}
           lineup={rotation?.awayLineup ?? null}
           isServing={awayServing}
           setComplete={setComplete}
-          subCount={awaySubCount}
-          maxSubs={config.maxSubsPerSet}
           timeoutCount={awayTimeoutCount}
           maxTimeouts={config.maxTimeoutsPerSet}
+          subCount={awaySubCount}
+          maxSubs={config.maxSubsPerSet}
           hasLibero={hasLiberoAway}
+          liberoNums={awayLiberoNums}
           onPoint={() => awardPoint('away')}
           onDecrement={() => decrementPoint('away')}
-          onSub={() => setShowSubDialog('away')}
           onLibero={() => setShowLiberoPanel('away')}
+          onSubPlayer={(playerOut) => setShowSubDialog({ team: 'away', playerOut })}
         />
       </div>
 
@@ -182,7 +157,11 @@ export default function ScoringPage() {
 
       {/* Dialogs */}
       {showSubDialog && (
-        <SubstitutionDialog team={showSubDialog} onClose={() => setShowSubDialog(null)} />
+        <SubstitutionDialog
+          team={showSubDialog.team}
+          preSelectedOut={showSubDialog.playerOut}
+          onClose={() => setShowSubDialog(null)}
+        />
       )}
       {showLiberoPanel && (
         <LiberoPanel team={showLiberoPanel} onClose={() => setShowLiberoPanel(null)} />
@@ -199,48 +178,81 @@ export default function ScoringPage() {
 interface TeamPanelProps {
   teamName: string;
   teamSide: TeamSide;
+  teamScore: number;
   lineup: Lineup | null;
   isServing: boolean;
   setComplete: boolean;
-  subCount: number;
-  maxSubs: number;
   timeoutCount: number;
   maxTimeouts: number;
+  subCount: number;
+  maxSubs: number;
   hasLibero: boolean;
+  liberoNums: Set<number>;
   onPoint: () => void;
   onDecrement: () => void;
-  onSub: () => void;
   onLibero: () => void;
+  onSubPlayer: (playerOut: number) => void;
 }
 
 function TeamPanel({
   teamName,
   teamSide,
+  teamScore,
   lineup,
   isServing,
   setComplete,
-  subCount,
-  maxSubs,
   timeoutCount,
   maxTimeouts,
+  subCount,
+  maxSubs,
   hasLibero,
+  liberoNums,
   onPoint,
   onDecrement,
-  onSub,
   onLibero,
+  onSubPlayer,
 }: TeamPanelProps) {
   const isHome = teamSide === 'home';
   const side = isHome ? 'home' : 'away';
   const borderColor = isHome ? 'border-blue-600' : 'border-red-700';
-  const servingBorder = isServing ? 'ring-2 ring-yellow-400' : '';
+  const servingBorder = '';
   const pointBg = isHome
     ? 'bg-blue-700 hover:bg-blue-600 active:bg-blue-500'
     : 'bg-red-700 hover:bg-red-600 active:bg-red-500';
   return (
-    <div data-name={`${side}-panel`} className={`flex flex-col border-2 ${borderColor} ${servingBorder} rounded-xl bg-slate-800/50 p-3 gap-3`} style={{ width: '32.5%' }}>
-      {/* Team Name */}
-      <div data-name={`${side}-team-name`} className="text-center text-sm text-slate-400 font-medium">
-        {teamName} {isServing && <span className="text-yellow-400">(Serving)</span>}
+    <div data-name={`${side}-panel`} className={`flex flex-col border-2 ${borderColor} ${servingBorder} rounded-xl bg-slate-800/50 p-2 gap-2`} style={{ width: '44%', maxWidth: '220px' }}>
+      {/* Header: T/O+SUB left, Name center, Lib right */}
+      <div data-name={`${side}-header`} className="flex items-start justify-between">
+        <div className="flex flex-col gap-1">
+          <TimeoutButton team={teamSide} count={timeoutCount} max={maxTimeouts} disabled={setComplete} />
+          <div data-name={`${side}-sub-label`} className="text-[10px] font-semibold text-white text-center">
+            SUB [{maxSubs - subCount}]
+          </div>
+        </div>
+        <div data-name={`${side}-score-name`} className="flex flex-col items-center px-1">
+          <div className={`relative ${isHome ? 'bg-blue-900' : 'bg-red-900'} ${isServing ? 'border-yellow-400' : isHome ? 'border-blue-500' : 'border-red-500'} border-2 rounded-lg w-[52px] text-center`}>
+            <span className="text-3xl font-bold text-white tabular-nums">{teamScore}</span>
+            {isServing && (
+              <svg className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-yellow-400 ${isHome ? '-left-5' : '-right-5'}`} fill="currentColor" viewBox="0 0 20 20">
+                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.5" />
+                <circle cx="10" cy="10" r="3.5" />
+              </svg>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium leading-tight truncate max-w-full mt-0.5">{teamName}</span>
+        </div>
+        {hasLibero ? (
+          <button
+            data-name={`${side}-libero-btn`}
+            onClick={onLibero}
+            disabled={setComplete}
+            className="bg-teal-700 hover:bg-teal-600 disabled:opacity-40 text-white text-xs font-semibold px-2 py-1 rounded-md transition-colors touch-manipulation"
+          >
+            Lib
+          </button>
+        ) : (
+          <div className="w-10" />
+        )}
       </div>
 
       {/* Rotation Grid */}
@@ -248,27 +260,27 @@ function TeamPanel({
         <div data-name={`${side}-rotation-grid`} className="flex-1 flex flex-col justify-center">
           {/* Net-side labels */}
           <div data-name={`${side}-front-labels`} className="grid grid-cols-3 gap-1 text-center">
-            <span className="text-xs text-slate-500">IV</span>
-            <span className="text-xs text-slate-500">III</span>
-            <span className="text-xs text-slate-500">II</span>
+            <span className="text-[10px] text-slate-500">IV</span>
+            <span className="text-[10px] text-slate-500">III</span>
+            <span className="text-[10px] text-slate-500">II</span>
           </div>
           {/* Front row */}
           <div data-name={`${side}-front-row`} className="grid grid-cols-3 gap-1">
-            <RotCell num={lineup[4]} name={`${side}-pos-IV`} />
-            <RotCell num={lineup[3]} name={`${side}-pos-III`} />
-            <RotCell num={lineup[2]} name={`${side}-pos-II`} />
+            <RotCell num={lineup[4]} name={`${side}-pos-IV`} isLibero={liberoNums.has(lineup[4])} onTap={!setComplete ? onSubPlayer : undefined} />
+            <RotCell num={lineup[3]} name={`${side}-pos-III`} isLibero={liberoNums.has(lineup[3])} onTap={!setComplete ? onSubPlayer : undefined} />
+            <RotCell num={lineup[2]} name={`${side}-pos-II`} isLibero={liberoNums.has(lineup[2])} onTap={!setComplete ? onSubPlayer : undefined} />
           </div>
           {/* Back row */}
           <div data-name={`${side}-back-row`} className="grid grid-cols-3 gap-1 mt-1">
-            <RotCell num={lineup[5]} name={`${side}-pos-V`} />
-            <RotCell num={lineup[6]} name={`${side}-pos-VI`} />
-            <RotCell num={lineup[1]} name={`${side}-pos-I`} serve={isServing} />
+            <RotCell num={lineup[5]} name={`${side}-pos-V`} isLibero={liberoNums.has(lineup[5])} onTap={!setComplete ? onSubPlayer : undefined} />
+            <RotCell num={lineup[6]} name={`${side}-pos-VI`} isLibero={liberoNums.has(lineup[6])} onTap={!setComplete ? onSubPlayer : undefined} />
+            <RotCell num={lineup[1]} name={`${side}-pos-I`} serve={isServing} isLibero={liberoNums.has(lineup[1])} onTap={!setComplete ? onSubPlayer : undefined} />
           </div>
           {/* Back-side labels */}
           <div data-name={`${side}-back-labels`} className="grid grid-cols-3 gap-1 text-center">
-            <span className="text-xs text-slate-500">V</span>
-            <span className="text-xs text-slate-500">VI</span>
-            <span className="text-xs text-slate-500">I</span>
+            <span className="text-[10px] text-slate-500">V</span>
+            <span className="text-[10px] text-slate-500">VI</span>
+            <span className="text-[10px] text-slate-500">I</span>
           </div>
         </div>
       )}
@@ -279,64 +291,41 @@ function TeamPanel({
           <button
             data-name={`${side}-plus-btn`}
             onClick={onPoint}
-            className={`flex-1 ${pointBg} text-white text-2xl font-bold py-3 rounded-l-lg transition-colors active:scale-95 touch-manipulation`}
+            className={`flex-1 ${pointBg} text-white text-2xl font-bold py-2 rounded-l-lg transition-colors active:scale-95 touch-manipulation`}
           >
             +
           </button>
           <button
             data-name={`${side}-minus-btn`}
             onClick={onDecrement}
-            className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-3 rounded-r-lg transition-colors active:scale-95 touch-manipulation"
+            className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-2 rounded-r-lg transition-colors active:scale-95 touch-manipulation"
           >
             −
           </button>
         </div>
       )}
-
-      {/* Action Buttons */}
-      <div data-name={`${side}-action-buttons`} className="flex gap-2 justify-center">
-        <TimeoutButton
-          team={teamSide}
-          count={timeoutCount}
-          max={maxTimeouts}
-          disabled={setComplete}
-        />
-        <button
-          data-name={`${side}-sub-btn`}
-          onClick={onSub}
-          disabled={setComplete}
-          className="bg-indigo-700 hover:bg-indigo-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-        >
-          SUB ({subCount}/{maxSubs})
-        </button>
-        {hasLibero && (
-          <button
-            data-name={`${side}-libero-btn`}
-            onClick={onLibero}
-            disabled={setComplete}
-            className="bg-teal-700 hover:bg-teal-600 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm px-4 py-2 rounded-lg transition-colors"
-          >
-            Libero
-          </button>
-        )}
-      </div>
     </div>
   );
 }
 
 // ── Rotation Cell ────────────────────────────────────────────
 
-function RotCell({ num, serve, name }: { num: number; serve?: boolean; name: string }) {
+function RotCell({ num, serve, name, isLibero, onTap }: { num: number; serve?: boolean; name: string; isLibero?: boolean; onTap?: (playerNum: number) => void }) {
   return (
-    <div
+    <button
+      type="button"
       data-name={name}
-      className={`rounded px-2 py-2 text-center text-lg font-bold ${
-        serve
-          ? 'bg-yellow-600 text-white'
-          : 'bg-slate-700 text-white'
+      onClick={onTap ? () => onTap(num) : undefined}
+      className={`relative overflow-hidden rounded px-1 py-1.5 text-center text-base font-bold transition-colors touch-manipulation bg-slate-700 active:bg-slate-600 ${
+        serve ? 'text-yellow-400 ring-1 ring-yellow-400' : 'text-white'
       }`}
     >
-      {num}
-    </div>
+      {isLibero && (
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 40 40" preserveAspectRatio="none">
+          <polygon points="0,40 20,4 40,40" fill="#0f766e" opacity="0.7" />
+        </svg>
+      )}
+      <span className="relative z-10">{num}</span>
+    </button>
   );
 }

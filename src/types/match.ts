@@ -118,7 +118,7 @@ export interface MatchConfig {
   bestOf: 3 | 5;
   pointsToWin: number; // 25 for regulation, configurable
   decidingSetPoints: number; // 15 for deciding set
-  maxSubsPerSet: number; // 6 per USAV
+  maxSubsPerSet: number; // 15 per USAV
   maxTimeoutsPerSet: number; // 2 per USAV
 }
 
