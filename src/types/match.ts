@@ -68,13 +68,25 @@ export interface LiberoReplacementEvent extends BaseEvent {
   autoSwap?: boolean; // true if auto-generated when libero would rotate to front row
 }
 
+export type SanctionRecipient = 'player' | 'coach' | 'asstCoach' | 'trainer' | 'manager';
+
 export interface SanctionEvent extends BaseEvent {
   type: 'sanction';
   team: TeamSide;
   playerNumber?: number;
   sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty';
+  sanctionRecipient?: SanctionRecipient;
   homeScore: number;
   awayScore: number;
+}
+
+export interface CorrectionEvent extends BaseEvent {
+  type: 'correction';
+  homeScore: number;
+  awayScore: number;
+  homeLineup: Lineup;
+  awayLineup: Lineup;
+  servingTeam: TeamSide;
 }
 
 export type MatchEvent =
@@ -82,7 +94,8 @@ export type MatchEvent =
   | SubstitutionEvent
   | TimeoutEvent
   | LiberoReplacementEvent
-  | SanctionEvent;
+  | SanctionEvent
+  | CorrectionEvent;
 
 // ── Set ───────────────────────────────────────────────────
 

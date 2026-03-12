@@ -81,8 +81,16 @@ export default function EventLog({ events, setIndex, homeTeam, awayTeam, actions
           'expulsion': 'Expulsion',
           'disqualification': 'Disqualification',
         };
+        const recipientLabels: Record<string, string> = {
+          'player': 'Player',
+          'coach': 'Coach',
+          'asstCoach': 'Asst Coach',
+          'trainer': 'Trainer',
+          'manager': 'Manager',
+        };
         const label = labels[e.sanctionType] || e.sanctionType;
-        return <><span className="text-yellow-400">{label}</span> <span className={teamColor(e.team)}>{getTeamName(e.team)}</span>{e.playerNumber ? <> <span className={teamColor(e.team)}>#{e.playerNumber}</span></> : ''} <span className="text-blue-300">({e.homeScore}</span>-<span className="text-red-300">{e.awayScore})</span></>;
+        const recipientLabel = e.sanctionRecipient ? recipientLabels[e.sanctionRecipient] : '';
+        return <><span className="text-yellow-400">{label}</span> <span className={teamColor(e.team)}>{getTeamName(e.team)}</span>{recipientLabel ? <> <span className="text-orange-300">{recipientLabel}</span></> : ''}{e.playerNumber ? <> <span className={teamColor(e.team)}>#{e.playerNumber}</span></> : ''} <span className="text-blue-300">({e.homeScore}</span>-<span className="text-red-300">{e.awayScore})</span></>;
       }
       default:
         return 'Unknown event';
@@ -98,6 +106,7 @@ export default function EventLog({ events, setIndex, homeTeam, awayTeam, actions
             {setCompleteMessage}
           </div>
         )}
+        <div className={setCompleteMessage ? 'opacity-40' : ''}>
         {setEvents.map((e, i) => (
           <div key={e.id}>
             {isLatestAutoSwap(e) && (
@@ -113,6 +122,7 @@ export default function EventLog({ events, setIndex, homeTeam, awayTeam, actions
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

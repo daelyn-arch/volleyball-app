@@ -350,6 +350,10 @@ export default function SetupPage() {
       }
       rest.push(lastPoint);
 
+      const sanctionsDone: Record<string, number> = { home: 0, away: 0 };
+      const sanctionTypes: Array<'warning' | 'penalty' | 'delay-warning' | 'delay-penalty'> = ['warning', 'penalty', 'delay-warning', 'delay-penalty'];
+      const sanctionRecipients: Array<'player' | 'coach' | 'asstCoach'> = ['player', 'player', 'player', 'coach', 'asstCoach'];
+
       for (const team of rest) {
         // Random timeout (~5% chance, max 2 per team)
         const toTeam: TeamSide = Math.random() < 0.5 ? 'home' : 'away';
@@ -372,6 +376,20 @@ export default function SetupPage() {
             store.recordSubstitution('home', pin, pout);
             subsDone.home++;
           }
+        }
+
+        // Random sanction (~3% chance, max 2 per team per set)
+        const sanctionTeam: TeamSide = Math.random() < 0.5 ? 'home' : 'away';
+        if (Math.random() < 0.03 && sanctionsDone[sanctionTeam] < 2) {
+          const sType = sanctionTypes[Math.floor(Math.random() * sanctionTypes.length)];
+          // Warnings and penalties always target a player
+          const isPlayerSanction = sType === 'warning' || sType === 'penalty';
+          const recipient = isPlayerSanction ? 'player' : sanctionRecipients[Math.floor(Math.random() * sanctionRecipients.length)];
+          const playerNum = recipient === 'player'
+            ? (sanctionTeam === 'home' ? Math.floor(Math.random() * 6) + 1 : Math.floor(Math.random() * 6) + 11)
+            : undefined;
+          store.recordSanction(sanctionTeam, sType, playerNum, recipient);
+          sanctionsDone[sanctionTeam]++;
         }
 
         store.awardPoint(team);

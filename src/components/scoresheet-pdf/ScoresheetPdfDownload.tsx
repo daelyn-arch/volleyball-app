@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMatchStore } from '@/store/matchStore';
 import { useDialog } from '@/components/ThemedDialog';
 
-export default function ScoresheetPdfDownload() {
+export default function ScoresheetPdfDownload({ fullWidth }: { fullWidth?: boolean }) {
   const [loading, setLoading] = useState(false);
   const { showAlert } = useDialog();
 
@@ -24,7 +24,7 @@ export default function ScoresheetPdfDownload() {
     <button
       onClick={handleDownload}
       disabled={loading}
-      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+      className={`bg-blue-600 hover:bg-blue-500 disabled:bg-gray-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors${fullWidth ? ' w-full' : ''}`}
     >
       {loading ? 'Generating...' : 'Download PDF'}
     </button>

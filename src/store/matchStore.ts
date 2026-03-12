@@ -10,6 +10,7 @@ import type {
   CourtPosition,
   MatchEvent,
   SetData,
+  SanctionRecipient,
 } from '@/types/match';
 import { DEFAULT_CONFIG } from '@/utils/scoring';
 import { isSetComplete, getSetWinner, isMatchComplete } from '@/utils/scoring';
@@ -51,6 +52,13 @@ function createEmptySetData(): SetData {
   };
 }
 
+interface SanctionInput {
+  team: TeamSide;
+  sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty';
+  playerNumber?: number;
+  sanctionRecipient?: SanctionRecipient;
+}
+
 interface MatchActions {
   // Setup
   createMatch: (homeTeam: Team, awayTeam: Team, config?: Partial<MatchConfig>, metadata?: Partial<MatchMetadata>) => void;
@@ -79,7 +87,21 @@ interface MatchActions {
   ) => string | null;
 
   // Sanctions
-  recordSanction: (team: TeamSide, sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty', playerNumber?: number) => void;
+  recordSanction: (team: TeamSide, sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty', playerNumber?: number, sanctionRecipient?: SanctionRecipient) => void;
+  recordDoubleSanction: (sanction1: SanctionInput, sanction2: SanctionInput) => void;
+
+  // Wrong Server
+  getWrongServerPointCount: (team: TeamSide) => number;
+  cancelWrongServerPoints: (team: TeamSide, count: number) => number;
+
+  // Exceptional Substitution
+  recordExceptionalSubstitution: (team: TeamSide, playerIn: number, playerOut: number) => void;
+
+  // Corrections
+  applyCorrection: (homeScore: number, awayScore: number, homeLineup: Lineup, awayLineup: Lineup, servingTeam: TeamSide) => void;
+
+  // Remarks
+  addRemark: (note: string) => void;
 
   // Undo
   undo: () => void;
@@ -268,13 +290,13 @@ export const useMatchStore = create<MatchStore>()(
         const setData = sets[setIndex];
         let setsUpdated = false;
 
-        // First point of the set → record start time
+        // First point of the set torecord start time
         if (currentScore.home === 0 && currentScore.away === 0) {
           sets[setIndex] = { ...setData, startTime: Date.now() };
           setsUpdated = true;
         }
 
-        // Set just completed → record end time
+        // Set just completed torecord end time
         if (setWinner) {
           sets[setIndex] = { ...(setsUpdated ? sets[setIndex] : setData), endTime: Date.now() };
           setsUpdated = true;
@@ -418,7 +440,7 @@ export const useMatchStore = create<MatchStore>()(
         return null;
       },
 
-      recordSanction: (team, sanctionType, playerNumber) => {
+      recordSanction: (team, sanctionType, playerNumber, sanctionRecipient) => {
         const state = get();
         const setIndex = state.currentSetIndex;
         const currentScore = getSetScore(state.events, setIndex);
@@ -440,6 +462,7 @@ export const useMatchStore = create<MatchStore>()(
           setIndex,
           team,
           sanctionType,
+          sanctionRecipient,
           playerNumber,
           homeScore: currentScore.home,
           awayScore: currentScore.away,
@@ -466,6 +489,279 @@ export const useMatchStore = create<MatchStore>()(
         }
 
         set({ events: [...state.events, ...newEvents] });
+      },
+
+      recordDoubleSanction: (sanction1, sanction2) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+        const currentScore = getSetScore(state.events, setIndex);
+        const rotation = getCurrentRotation(state, setIndex);
+
+        // Snapshot pre-sanction state
+        const preServingTeam = rotation?.servingTeam ?? 'home';
+        const preServerNumber = rotation ? getServer(preServingTeam === 'home' ? rotation.homeLineup : rotation.awayLineup) : 0;
+        const preHomeLineup = rotation ? { ...rotation.homeLineup } : null;
+        const preAwayLineup = rotation ? { ...rotation.awayLineup } : null;
+
+        const awardsPoint = (type: string) =>
+          type === 'penalty' || type === 'delay-penalty' || type === 'expulsion' || type === 'disqualification';
+        const s1Awards = awardsPoint(sanction1.sanctionType);
+        const s2Awards = awardsPoint(sanction2.sanctionType);
+
+        const opposing1: TeamSide = sanction1.team === 'home' ? 'away' : 'home';
+        const opposing2: TeamSide = sanction2.team === 'home' ? 'away' : 'home';
+
+        let runningHome = currentScore.home;
+        let runningAway = currentScore.away;
+        const newEvents: MatchEvent[] = [];
+
+        // Sanction 1
+        newEvents.push({
+          type: 'sanction',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team: sanction1.team,
+          sanctionType: sanction1.sanctionType,
+          sanctionRecipient: sanction1.sanctionRecipient,
+          playerNumber: sanction1.playerNumber,
+          homeScore: runningHome,
+          awayScore: runningAway,
+        });
+
+        if (s1Awards) {
+          if (opposing1 === 'home') runningHome++;
+          else runningAway++;
+          newEvents.push({
+            type: 'point',
+            id: generateId(),
+            timestamp: Date.now(),
+            setIndex,
+            scoringTeam: opposing1,
+            servingTeam: preServingTeam,
+            serverNumber: preServerNumber,
+            homeScore: runningHome,
+            awayScore: runningAway,
+          });
+        }
+
+        // Sanction 2
+        newEvents.push({
+          type: 'sanction',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team: sanction2.team,
+          sanctionType: sanction2.sanctionType,
+          sanctionRecipient: sanction2.sanctionRecipient,
+          playerNumber: sanction2.playerNumber,
+          homeScore: runningHome,
+          awayScore: runningAway,
+        });
+
+        if (s2Awards) {
+          if (opposing2 === 'home') runningHome++;
+          else runningAway++;
+          newEvents.push({
+            type: 'point',
+            id: generateId(),
+            timestamp: Date.now(),
+            setIndex,
+            scoringTeam: opposing2,
+            servingTeam: preServingTeam,
+            serverNumber: preServerNumber,
+            homeScore: runningHome,
+            awayScore: runningAway,
+          });
+        }
+
+        // If both awarded points, restore pre-sanction rotation (no service change rule)
+        if (s1Awards && s2Awards && preHomeLineup && preAwayLineup) {
+          newEvents.push({
+            type: 'correction',
+            id: generateId(),
+            timestamp: Date.now(),
+            setIndex,
+            homeScore: runningHome,
+            awayScore: runningAway,
+            homeLineup: preHomeLineup,
+            awayLineup: preAwayLineup,
+            servingTeam: preServingTeam,
+          });
+        }
+
+        const allEvents = [...state.events, ...newEvents];
+        const remarks = [...(state.remarks || [])];
+        remarks.push(`DOUBLE SANCTION Set ${setIndex + 1}: no service change (${runningHome}-${runningAway})`);
+
+        const newScore = getSetScore(allEvents, setIndex);
+        const setWinner = getSetWinner(newScore, setIndex, state.config);
+        let newMatchComplete = state.matchComplete;
+        if (setWinner) {
+          const setsWon = getSetsWon({ ...state, events: allEvents });
+          newMatchComplete = isMatchComplete(setsWon, state.config);
+        }
+
+        set({ events: allEvents, matchComplete: newMatchComplete, remarks });
+      },
+
+      getWrongServerPointCount: (team) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+        let count = 0;
+        for (let i = state.events.length - 1; i >= 0; i--) {
+          const e = state.events[i];
+          if (e.setIndex !== setIndex) break;
+          if (e.type !== 'point') continue;
+          if (e.scoringTeam === team && e.servingTeam === team) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        return count;
+      },
+
+      cancelWrongServerPoints: (team, count) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+
+        // Walk backward to find consecutive points in current service run
+        const allMatching: number[] = [];
+        for (let i = state.events.length - 1; i >= 0; i--) {
+          const e = state.events[i];
+          if (e.setIndex !== setIndex) break;
+          if (e.type !== 'point') continue;
+          if (e.scoringTeam === team && e.servingTeam === team) {
+            allMatching.push(i);
+          } else {
+            break;
+          }
+        }
+
+        if (allMatching.length === 0 || count <= 0) return 0;
+
+        // Only remove the most recent 'count' points (allMatching is newest-first)
+        const indicesToRemove = allMatching.slice(0, Math.min(count, allMatching.length));
+        const removeSet = new Set(indicesToRemove);
+        const actualCount = indicesToRemove.length;
+        const firstRemoveIdx = Math.min(...indicesToRemove);
+
+        // Build new events: remove points and adjust subsequent scores
+        const newEvents: MatchEvent[] = [];
+        for (let i = 0; i < state.events.length; i++) {
+          if (removeSet.has(i)) continue;
+          const e = state.events[i];
+          if (i > firstRemoveIdx && e.setIndex === setIndex) {
+            if (e.type === 'point' || e.type === 'substitution' || e.type === 'timeout' || e.type === 'sanction') {
+              const adjusted = { ...e };
+              if (team === 'home') adjusted.homeScore -= actualCount;
+              else adjusted.awayScore -= actualCount;
+              newEvents.push(adjusted);
+              continue;
+            }
+          }
+          newEvents.push(e);
+        }
+
+        // Add correction to switch server to opponent
+        const opposingTeam: TeamSide = team === 'home' ? 'away' : 'home';
+        const rotation = getCurrentRotation({ ...state, events: newEvents }, setIndex);
+        if (rotation) {
+          const newScore = getSetScore(newEvents, setIndex);
+          newEvents.push({
+            type: 'correction',
+            id: generateId(),
+            timestamp: Date.now(),
+            setIndex,
+            homeScore: newScore.home,
+            awayScore: newScore.away,
+            homeLineup: rotation.homeLineup,
+            awayLineup: rotation.awayLineup,
+            servingTeam: opposingTeam,
+          });
+        }
+
+        const finalScore = getSetScore(newEvents, setIndex);
+        const teamName = team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+        const remarks = [...(state.remarks || [])];
+        remarks.push(`WRONG SERVER: ${actualCount} pts removed from ${teamName}, Set ${setIndex + 1}, ${finalScore.home}-${finalScore.away}`);
+
+        const setWinner = getSetWinner(finalScore, setIndex, state.config);
+        let newMatchComplete = false;
+        if (setWinner) {
+          const setsWon = getSetsWon({ ...state, events: newEvents });
+          newMatchComplete = isMatchComplete(setsWon, state.config);
+        }
+
+        set({ events: newEvents, matchComplete: newMatchComplete, remarks });
+        return actualCount;
+      },
+
+      recordExceptionalSubstitution: (team, playerIn, playerOut) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+        const currentScore = getSetScore(state.events, setIndex);
+        const subCount = state.events.filter(
+          (e) => e.setIndex === setIndex && e.type === 'substitution' && e.team === team
+        ).length;
+
+        const event: MatchEvent = {
+          type: 'substitution',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team,
+          playerIn,
+          playerOut,
+          homeScore: currentScore.home,
+          awayScore: currentScore.away,
+          subNumber: subCount + 1,
+        };
+
+        const teamName = team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+        const remarks = [...(state.remarks || [])];
+        remarks.push(`EXCEPTIONAL SUB: #${playerIn} for #${playerOut} (injury), ${teamName}, Set ${setIndex + 1}, ${currentScore.home}-${currentScore.away}`);
+
+        set({ events: [...state.events, event], remarks });
+      },
+
+      applyCorrection: (homeScore, awayScore, homeLineup, awayLineup, servingTeam) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+        const currentScore = getSetScore(state.events, setIndex);
+        const rotation = getCurrentRotation(state, setIndex);
+
+        const event: MatchEvent = {
+          type: 'correction',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          homeScore,
+          awayScore,
+          homeLineup,
+          awayLineup,
+          servingTeam,
+        };
+
+        const changes: string[] = [];
+        if (currentScore.home !== homeScore || currentScore.away !== awayScore) {
+          changes.push(`Score: ${currentScore.home}:${currentScore.away} to${homeScore}:${awayScore}`);
+        }
+        if (rotation && rotation.servingTeam !== servingTeam) {
+          const servName = servingTeam === 'home' ? state.homeTeam.name : state.awayTeam.name;
+          changes.push(`Server to${servName}`);
+        }
+
+        const remarks = [...(state.remarks || [])];
+        remarks.push(`CORRECTION Set ${setIndex + 1} (${homeScore}:${awayScore}): ${changes.join(', ') || 'Lineup adjusted'}`);
+
+        set({ events: [...state.events, event], remarks });
+      },
+
+      addRemark: (note: string) => {
+        const state = get();
+        set({ remarks: [...(state.remarks || []), note] });
       },
 
       undo: () => {

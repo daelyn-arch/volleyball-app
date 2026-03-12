@@ -1,6 +1,6 @@
 import { PDFDocument, rgb, PDFName, TextAlignment } from 'pdf-lib';
 import type { PDFPage } from 'pdf-lib';
-import type { MatchState, TeamSide, CourtPosition, PointEvent, MatchEvent, SetData } from '@/types/match';
+import type { MatchState, TeamSide, CourtPosition, PointEvent, MatchEvent, SetData, SanctionRecipient } from '@/types/match';
 import {
   getSetScore,
   getSetsWon,
@@ -31,10 +31,17 @@ type SetSuffix = '' | '_2';
 type SidePrefix = 'Left' | 'Right';
 
 interface DrawInstruction {
-  shape: 'triangle' | 'circle' | 'tbar' | 'slash';
+  shape: 'triangle' | 'circle' | 'slash';
   fieldName?: string;          // resolve rect from form field
   rect?: { x: number; y: number; width: number; height: number }; // direct rect
   pageIndex?: number;          // page index when using direct rect
+}
+
+interface TBarRange {
+  side: 'Left' | 'Right';
+  setIndex: number;
+  startPoint: number;
+  endPoint: number;
 }
 
 function getSetSuffix(setIndex: number): SetSuffix {
@@ -45,11 +52,14 @@ function getSidePrefix(side: 'left' | 'right'): SidePrefix {
   return side === 'left' ? 'Left' : 'Right';
 }
 
-function safeSetField(form: any, name: string, value: string, alignment?: TextAlignment) {
+function safeSetField(form: any, name: string, value: string, alignment?: TextAlignment, fontSize?: number) {
   try {
     const field = form.getTextField(name);
     if (alignment !== undefined) {
       field.setAlignment(alignment);
+    }
+    if (fontSize !== undefined) {
+      field.setFontSize(fontSize);
     }
     field.setText(value);
   } catch {
@@ -165,22 +175,63 @@ function drawSlashOnPage(
   });
 }
 
-/** Draw a T-bar (horizontal line with vertical stem) to mark unused points */
-function drawTBarOnPage(
-  page: PDFPage,
-  rect: { x: number; y: number; width: number; height: number }
-) {
-  const cx = rect.x + rect.width / 2;
-  const cy = rect.y + rect.height / 2;
-  const color = rgb(0, 0, 0);
-  const thickness = 0.75;
-  const halfW = rect.width * 0.35;
-  const halfH = rect.height * 0.3;
+// ── Running Score Grid Coordinate Map ─────────────────────────
+// Extracted from PDF field positions. Each cell is 8.4×8.4.
+// Coordinates are bottom-left corner (PDF origin = bottom-left, y goes up).
+// 3 physical columns per side: points 1-12, 13-24, 25-36.
+const CELL_SIZE = 8.4;
+const SCORE_GRID: Record<string, { colX: number[]; rowY: number[] }> = {
+  'Left_0':  { colX: [272.7, 283.0, 293.1], rowY: [468.4, 456.8, 445.6, 434.1, 422.4, 411.0, 399.7, 388.3, 377.0, 365.2, 354.2, 342.5] },
+  'Right_0': { colX: [315.0, 325.1, 335.3], rowY: [468.4, 456.8, 445.6, 434.1, 422.4, 411.0, 399.7, 388.3, 377.0, 365.2, 354.2, 342.5] },
+  'Left_1':  { colX: [272.7, 283.1, 293.2], rowY: [223.1, 211.5, 200.3, 188.8, 177.2, 165.7, 154.4, 143.0, 131.7, 119.9, 108.9, 97.2] },
+  'Right_1': { colX: [314.9, 325.2, 335.4], rowY: [223.1, 211.5, 200.3, 188.8, 177.2, 165.7, 154.4, 143.0, 131.7, 119.9, 108.9, 97.2] },
+};
 
-  // Horizontal top bar
-  page.drawLine({ start: { x: cx - halfW, y: cy + halfH }, end: { x: cx + halfW, y: cy + halfH }, thickness, color });
-  // Vertical stem
-  page.drawLine({ start: { x: cx, y: cy + halfH }, end: { x: cx, y: cy - halfH }, thickness, color });
+function getScoreCellRect(side: 'Left' | 'Right', setIndex: number, point: number): { x: number; y: number } | null {
+  if (point < 1 || point > 36) return null;
+  const grid = SCORE_GRID[`${side}_${setIndex}`];
+  if (!grid) return null;
+  const col = Math.floor((point - 1) / 12);
+  const row = (point - 1) % 12;
+  return { x: grid.colX[col], y: grid.rowY[row] };
+}
+
+/** Draw T-bars for a team's running score column. Groups by physical column. */
+function drawTBarsOnPage(
+  page: PDFPage,
+  side: 'Left' | 'Right',
+  setIndex: number,
+  startPoint: number,
+  endPoint: number,
+) {
+  if (startPoint > endPoint || startPoint > 36) return;
+  const capped = Math.min(endPoint, 36);
+  const color = rgb(0, 0, 0);
+  const thickness = 1;
+  const halfW = CELL_SIZE * 0.35;
+
+  // Group points by physical column (0=1-12, 1=13-24, 2=25-36)
+  const columns = new Map<number, { start: number; end: number }>();
+  for (let p = startPoint; p <= capped; p++) {
+    const col = Math.floor((p - 1) / 12);
+    if (!columns.has(col)) columns.set(col, { start: p, end: p });
+    else columns.get(col)!.end = p;
+  }
+
+  for (const [, range] of columns) {
+    const first = getScoreCellRect(side, setIndex, range.start);
+    const last = getScoreCellRect(side, setIndex, range.end);
+    if (!first || !last) continue;
+
+    const cx = first.x + CELL_SIZE / 2;
+    const topY = first.y + CELL_SIZE;   // top edge of first empty cell
+    const bottomY = last.y;              // bottom edge of last empty cell
+
+    // Horizontal bar at top
+    page.drawLine({ start: { x: cx - halfW, y: topY }, end: { x: cx + halfW, y: topY }, thickness, color });
+    // Vertical stem down
+    page.drawLine({ start: { x: cx, y: topY }, end: { x: cx, y: bottomY }, thickness, color });
+  }
 }
 
 // ── Libero Serving Detection ─────────────────────────────────
@@ -230,7 +281,8 @@ function fillTeamSetFields(
   team: TeamSide,
   sidePrefix: SidePrefix,
   setSuffix: SetSuffix,
-  drawInstructions: DrawInstruction[]
+  drawInstructions: DrawInstruction[],
+  tbarRanges: TBarRange[],
 ) {
   const setData = state.sets[setIndex];
   if (!setData) return;
@@ -248,6 +300,21 @@ function fillTeamSetFields(
   // ── Running Score (Left_1 through Left_36 / Right_1 through Right_36) ──
   const runningScore = getRunningScoreData(state.events, setIndex);
   const teamScore = team === 'home' ? runningScore.home : runningScore.away;
+
+  // Determine which points were awarded by penalty (sanction followed by point)
+  const penaltyPoints = new Set<number>();
+  const setEvents = state.events.filter(e => e.setIndex === setIndex);
+  for (let i = 0; i < setEvents.length - 1; i++) {
+    const e = setEvents[i];
+    const next = setEvents[i + 1];
+    if (e.type === 'sanction' && next.type === 'point' &&
+        (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty' ||
+         e.sanctionType === 'expulsion' || e.sanctionType === 'disqualification') &&
+        next.scoringTeam === team) {
+      const point = team === 'home' ? next.homeScore : next.awayScore;
+      penaltyPoints.add(point);
+    }
+  }
 
   // Determine which points were scored during this team's own libero serve
   const teamData = team === 'home' ? state.homeTeam : state.awayTeam;
@@ -270,10 +337,13 @@ function fillTeamSetFields(
     if (entry.point >= 1 && entry.point <= 36) {
       const fieldName = `${sidePrefix}_${entry.point}${setSuffix}`;
       if (liberoServePoints.has(entry.point)) {
-        // Triangle only — no slash text for libero-serve points
         drawInstructions.push({ fieldName, shape: 'triangle' });
       } else {
         drawInstructions.push({ fieldName, shape: 'slash' });
+      }
+      // Penalty-awarded points also get a circle
+      if (penaltyPoints.has(entry.point)) {
+        drawInstructions.push({ fieldName, shape: 'circle' });
       }
       if (entry.point > maxPointScored) maxPointScored = entry.point;
     }
@@ -282,12 +352,20 @@ function fillTeamSetFields(
   // T-bar unused points after the final scored point (only when set is complete)
   const setScoreForTbar = getSetScore(state.events, setIndex);
   const setWinnerForTbar = getSetWinner(setScoreForTbar, setIndex, state.config);
-  if (setWinnerForTbar && maxPointScored > 0) {
-    const otherTeamFinalScore = team === 'home' ? setScoreForTbar.away : setScoreForTbar.home;
-    // T-bar from maxPointScored+1 up to the opponent's final score
-    for (let p = maxPointScored + 1; p <= otherTeamFinalScore && p <= 36; p++) {
-      const fieldName = `${sidePrefix}_${p}${setSuffix}`;
-      drawInstructions.push({ fieldName, shape: 'tbar' });
+  if (setWinnerForTbar) {
+    // T-bar from this team's last scored point+1 to the end of the physical column
+    // containing the higher score (covers all unused cells for both teams)
+    const higherScore = Math.max(setScoreForTbar.home, setScoreForTbar.away);
+    const lastCol = Math.floor((higherScore - 1) / 12);
+    const endOfLastCol = (lastCol + 1) * 12; // 12, 24, or 36
+    const startPoint = maxPointScored + 1;
+    if (startPoint <= endOfLastCol) {
+      tbarRanges.push({
+        side: sidePrefix as 'Left' | 'Right',
+        setIndex,
+        startPoint,
+        endPoint: endOfLastCol,
+      });
     }
   }
 
@@ -419,7 +497,7 @@ function fillTeamSetFields(
       const subField = `${sidePrefix}_${posCol}_${ordinal}_sub${setSuffix}`;
       const subScoreField = `${sidePrefix}_${posCol}_${ordinal}_sub_score${setSuffix}`;
       safeSetField(form, subField, String(sub.playerIn), TextAlignment.Center);
-      safeSetField(form, subScoreField, `${sub.homeScore} ${sub.awayScore}`, TextAlignment.Center);
+      safeSetField(form, subScoreField, `${sub.homeScore}:${sub.awayScore}`, TextAlignment.Center, 10);
     }
   }
 
@@ -435,7 +513,7 @@ function fillTeamSetFields(
     safeSetField(
       form,
       `${sidePrefix}_timeout_${to.timeoutNumber}${setSuffix}`,
-      `${to.homeScore} ${to.awayScore}`,
+      `${to.homeScore}:${to.awayScore}`,
       TextAlignment.Center
     );
   }
@@ -463,7 +541,7 @@ function fillTeamSetFields(
 
 // ── Main Export ──────────────────────────────────────────────
 
-export async function fillScoresheet(state: MatchState): Promise<Blob> {
+export async function fillScoresheet(state: MatchState, { flatten = true }: { flatten?: boolean } = {}): Promise<Blob> {
   const pdfUrl = '/Non-deciding-two-set-scoresheet_prepared_form.pdf';
   const existingPdfBytes = await fetch(pdfUrl).then(res => res.arrayBuffer());
   const doc = await PDFDocument.load(existingPdfBytes);
@@ -517,24 +595,38 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
   const sanctionEvents = state.events.filter(
     (e): e is import('@/types/match').SanctionEvent => e.type === 'sanction'
   );
+
+  // Map recipient to the symbol used on the scoresheet
+  const recipientSymbol: Record<string, string> = {
+    player: '#',
+    coach: 'C',
+    asstCoach: 'A',
+    trainer: 'T',
+    manager: 'M',
+  };
+
   sanctionEvents.forEach((e, idx) => {
     if (idx >= 5) return; // max 5 rows
     const row = idx + 1;
     const teamLetter = e.team === 'home' ? 'A' : 'B';
 
-    // Mark the type column
-    if (e.sanctionType === 'warning') {
-      safeSetField(form, `yellow_card_${row}`, 'X', TextAlignment.Center);
-    } else if (e.sanctionType === 'penalty') {
-      safeSetField(form, `red_card_${row}`, 'X', TextAlignment.Center);
-    } else if (e.sanctionType === 'delay-warning') {
-      safeSetField(form, `yellow_card_${row}`, 'D', TextAlignment.Center);
-    } else if (e.sanctionType === 'delay-penalty') {
-      safeSetField(form, `red_card_${row}`, 'D', TextAlignment.Center);
+    // Determine the symbol: 'D' for delays, player number for players, recipient symbol for others
+    const isDelay = e.sanctionType === 'delay-warning' || e.sanctionType === 'delay-penalty';
+    const symbol = isDelay ? 'D' : (
+      e.sanctionRecipient === 'player' && e.playerNumber
+        ? String(e.playerNumber)
+        : (e.sanctionRecipient ? recipientSymbol[e.sanctionRecipient] || '#' : '#')
+    );
+
+    // Mark the type column with the appropriate symbol
+    if (e.sanctionType === 'warning' || e.sanctionType === 'delay-warning') {
+      safeSetField(form, `yellow_card_${row}`, symbol, TextAlignment.Center);
+    } else if (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty') {
+      safeSetField(form, `red_card_${row}`, symbol, TextAlignment.Center);
     } else if (e.sanctionType === 'expulsion') {
-      safeSetField(form, `explusion_${row}`, 'X', TextAlignment.Center);
+      safeSetField(form, `Expulsion_${row}`, symbol, TextAlignment.Center);
     } else if (e.sanctionType === 'disqualification') {
-      safeSetField(form, `disqualified_${row}`, 'X', TextAlignment.Center);
+      safeSetField(form, `Disqualified_${row}`, symbol, TextAlignment.Center);
     }
 
     // Team, set, and score
@@ -578,33 +670,63 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
     safeSetField(form, 'Wins:Losses', `${wins}:${losses}`, TextAlignment.Center);
   }
 
-  // ── Remarks (score corrections etc.) ──
-  if (state.remarks && state.remarks.length > 0) {
-    safeSetField(form, 'Remarks', state.remarks.join('\n'));
+  // ── Remarks ──
+  const remarks: string[] = state.remarks ? [...state.remarks] : [];
+
+  // Add sanction details to remarks
+  const sanctionLabels: Record<string, string> = {
+    'warning': 'Warning', 'penalty': 'Penalty',
+    'delay-warning': 'Delay Warning', 'delay-penalty': 'Delay Penalty',
+    'expulsion': 'Expulsion', 'disqualification': 'Disqualification',
+  };
+  const recipientLabels: Record<string, string> = {
+    player: 'Player', coach: 'Coach', asstCoach: 'Asst Coach', trainer: 'Trainer', manager: 'Manager',
+  };
+  sanctionEvents.forEach((e) => {
+    const teamName = e.team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+    const label = sanctionLabels[e.sanctionType] || e.sanctionType;
+    const recipient = e.sanctionRecipient ? recipientLabels[e.sanctionRecipient] || '' : '';
+    const playerStr = e.playerNumber ? ` #${e.playerNumber}` : '';
+    const scoreStr = `${e.homeScore}:${e.awayScore}`;
+    remarks.push(`Set ${e.setIndex + 1} (${scoreStr}): ${label} - ${teamName}${recipient ? ' ' + recipient : ''}${playerStr}`);
+  });
+
+  if (remarks.length > 0) {
+    try {
+      const remarksField = form.getTextField('Remarks');
+      remarksField.enableMultiline();
+      remarksField.setAlignment(TextAlignment.Left);
+      remarksField.setFontSize(6);
+      remarksField.setText(remarks.join('\n'));
+    } catch {
+      // fallback
+      safeSetField(form, 'Remarks', remarks.join('\n'), TextAlignment.Left, 6);
+    }
   }
 
   // ── Fill each set/team quadrant ──
+  const tbarRanges: TBarRange[] = [];
+
   if (state.sets[0]?.homeLineup || state.sets[0]?.awayLineup || state.events.some(e => e.setIndex === 0)) {
-    fillTeamSetFields(form, state, 0, 'home', getSidePrefix('left'), getSetSuffix(0), drawInstructions);
-    fillTeamSetFields(form, state, 0, 'away', getSidePrefix('right'), getSetSuffix(0), drawInstructions);
+    fillTeamSetFields(form, state, 0, 'home', getSidePrefix('left'), getSetSuffix(0), drawInstructions, tbarRanges);
+    fillTeamSetFields(form, state, 0, 'away', getSidePrefix('right'), getSetSuffix(0), drawInstructions, tbarRanges);
   }
 
   const hasSet2Events = state.events.some(e => e.setIndex === 1);
   if (hasSet2Events) {
-    fillTeamSetFields(form, state, 1, 'home', getSidePrefix('left'), getSetSuffix(1), drawInstructions);
-    fillTeamSetFields(form, state, 1, 'away', getSidePrefix('right'), getSetSuffix(1), drawInstructions);
+    fillTeamSetFields(form, state, 1, 'home', getSidePrefix('left'), getSetSuffix(1), drawInstructions, tbarRanges);
+    fillTeamSetFields(form, state, 1, 'away', getSidePrefix('right'), getSetSuffix(1), drawInstructions, tbarRanges);
   }
 
   // ── Resolve field positions BEFORE flattening ──
   const resolvedShapes: Array<{
     pageIndex: number;
     rect: { x: number; y: number; width: number; height: number };
-    shape: 'triangle' | 'circle' | 'tbar' | 'slash';
+    shape: 'triangle' | 'circle' | 'slash';
   }> = [];
 
   for (const instr of drawInstructions) {
     if (instr.rect) {
-      // Direct rect provided (e.g. for Roman numeral labels above fields)
       resolvedShapes.push({ pageIndex: instr.pageIndex ?? 0, rect: instr.rect, shape: instr.shape });
     } else if (instr.fieldName) {
       const rect = getFieldRect(form, instr.fieldName);
@@ -652,13 +774,18 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
       drawTriangleOnPage(page, s.rect);
     } else if (s.shape === 'circle') {
       drawCircleOnPage(page, s.rect);
-    } else if (s.shape === 'tbar') {
-      drawTBarOnPage(page, s.rect);
     } else if (s.shape === 'slash') {
       drawSlashOnPage(page, s.rect);
     }
   }
 
+  // ── Draw T-bars using coordinate map (precise, column-aware) ──
+  const page0 = pages[0];
+  for (const tb of tbarRanges) {
+    drawTBarsOnPage(page0, tb.side, tb.setIndex, tb.startPoint, tb.endPoint);
+  }
+
+  if (flatten) form.flatten();
   const pdfBytes = await doc.save();
   return new Blob([pdfBytes], { type: 'application/pdf' });
 }

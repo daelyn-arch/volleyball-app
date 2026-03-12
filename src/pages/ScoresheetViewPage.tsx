@@ -20,9 +20,9 @@ export default function ScoresheetViewPage() {
   }
 
   return (
-    <div className="min-h-full bg-white text-black">
+    <div className="min-h-full">
       {/* Header */}
-      <div className="bg-slate-800 text-white px-4 py-3 flex items-center justify-between gap-2">
+      <div className="bg-slate-800 px-4 py-3 flex items-center justify-between gap-2">
         <button
           onClick={() => navigate(matchComplete ? '/' : '/scoring')}
           className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap shrink-0"
@@ -30,37 +30,39 @@ export default function ScoresheetViewPage() {
           {matchComplete ? 'Home' : 'Back to Scoring'}
         </button>
         <h1 className="text-xl font-bold whitespace-nowrap">Scoresheet</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowPdfPreview(true)}
-            className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
-          >
-            Preview
-          </button>
-          <ScoresheetPdfDownload />
-        </div>
       </div>
 
       {/* Match Header */}
-      <div className="p-4 border-b-2 border-black">
+      <div className="p-4 border-b border-slate-700">
         <div className="max-w-4xl mx-auto">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 mb-2">
-            <div className="text-right min-w-0">
+            <div className="text-right min-w-0 bg-blue-900/30 border-2 border-blue-600 rounded-lg p-3">
               <div className="font-bold text-lg truncate">{homeTeam.name}</div>
-              <div className="text-gray-500 text-sm">(Home)</div>
+              <div className="text-slate-400 text-sm">(Home)</div>
             </div>
             <div className="text-2xl font-bold whitespace-nowrap">
               {setsWon.home} - {setsWon.away}
             </div>
-            <div className="text-left min-w-0">
+            <div className="text-left min-w-0 bg-red-900/30 border-2 border-red-700 rounded-lg p-3">
               <div className="font-bold text-lg truncate">{awayTeam.name}</div>
-              <div className="text-gray-500 text-sm">(Away)</div>
+              <div className="text-slate-400 text-sm">(Away)</div>
             </div>
           </div>
-          <div className="text-sm text-gray-500 text-center">
+          <div className="text-sm text-slate-400 text-center">
             Best of {config.bestOf} | {matchComplete ? 'Match Complete' : 'In Progress'}
           </div>
         </div>
+      </div>
+
+      {/* PDF Actions */}
+      <div className="max-w-5xl mx-auto px-4 pt-4 grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setShowPdfPreview(true)}
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+        >
+          Preview PDF
+        </button>
+        <ScoresheetPdfDownload fullWidth />
       </div>
 
       {/* Sets */}

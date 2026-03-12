@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMatchStore } from '@/store/matchStore';
-import type { TeamSide } from '@/types/match';
+import type { TeamSide, SanctionRecipient } from '@/types/match';
 
 interface Props {
   onClose: () => void;
@@ -9,15 +9,26 @@ interface Props {
 type SanctionType = 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty';
 type Category = 'delay' | 'warning' | 'expulsion' | 'disqualification';
 
+const RECIPIENT_OPTIONS: { value: SanctionRecipient; label: string; symbol: string }[] = [
+  { value: 'player', label: 'Player', symbol: '#' },
+  { value: 'coach', label: 'Coach', symbol: 'C' },
+  { value: 'asstCoach', label: 'Asst Coach', symbol: 'A' },
+  { value: 'trainer', label: 'Trainer', symbol: 'T' },
+  { value: 'manager', label: 'Manager', symbol: 'M' },
+];
+
 export default function SanctionDialog({ onClose }: Props) {
-  const [step, setStep] = useState<'category' | 'delay-sub' | 'team' | 'player'>('category');
+  const [step, setStep] = useState<'category' | 'delay-sub' | 'team' | 'recipient' | 'player' | 'double-prompt'>('category');
   const [selectedType, setSelectedType] = useState<SanctionType | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamSide | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState<SanctionRecipient | null>(null);
   const [playerInput, setPlayerInput] = useState('');
+  const [firstSanction, setFirstSanction] = useState<{ team: TeamSide; sanctionType: SanctionType; playerNumber?: number; sanctionRecipient?: SanctionRecipient } | null>(null);
 
   const homeTeam = useMatchStore((s) => s.homeTeam);
   const awayTeam = useMatchStore((s) => s.awayTeam);
   const recordSanction = useMatchStore((s) => s.recordSanction);
+  const recordDoubleSanction = useMatchStore((s) => s.recordDoubleSanction);
 
   function handleCategory(cat: Category) {
     if (cat === 'delay') {
@@ -41,26 +52,57 @@ export default function SanctionDialog({ onClose }: Props) {
 
   function handleSelectTeam(team: TeamSide) {
     setSelectedTeam(team);
-    // Delays are team-level, skip player
+    // Delays are team-level, skip recipient/player
     if (selectedType === 'delay-warning' || selectedType === 'delay-penalty') {
-      recordSanction(team, selectedType);
-      onClose();
+      finishSanction({ team, sanctionType: selectedType });
     } else {
+      setStep('recipient');
+    }
+  }
+
+  function handleSelectRecipient(recipient: SanctionRecipient) {
+    setSelectedRecipient(recipient);
+    if (recipient === 'player') {
       setStep('player');
+    } else {
+      if (!selectedType || !selectedTeam) return;
+      finishSanction({ team: selectedTeam, sanctionType: selectedType, sanctionRecipient: recipient });
     }
   }
 
   function handleSubmit() {
     if (!selectedType || !selectedTeam) return;
     const playerNum = playerInput ? parseInt(playerInput, 10) : undefined;
-    recordSanction(selectedTeam, selectedType, playerNum && !isNaN(playerNum) ? playerNum : undefined);
-    onClose();
+    finishSanction({ team: selectedTeam, sanctionType: selectedType, playerNumber: playerNum && !isNaN(playerNum) ? playerNum : undefined, sanctionRecipient: 'player' });
   }
 
   function handleSkipPlayer() {
     if (!selectedType || !selectedTeam) return;
-    recordSanction(selectedTeam, selectedType);
+    finishSanction({ team: selectedTeam, sanctionType: selectedType, sanctionRecipient: 'player' });
+  }
+
+  function finishSanction(details: { team: TeamSide; sanctionType: SanctionType; playerNumber?: number; sanctionRecipient?: SanctionRecipient }) {
+    if (firstSanction === null) {
+      setFirstSanction(details);
+      setStep('double-prompt');
+    } else {
+      recordDoubleSanction(firstSanction, details);
+      onClose();
+    }
+  }
+
+  function handleNoDouble() {
+    if (!firstSanction) return;
+    recordSanction(firstSanction.team, firstSanction.sanctionType, firstSanction.playerNumber, firstSanction.sanctionRecipient);
     onClose();
+  }
+
+  function handleYesDouble() {
+    setSelectedType(null);
+    setSelectedTeam(null);
+    setSelectedRecipient(null);
+    setPlayerInput('');
+    setStep('category');
   }
 
   const awardsPoint = selectedType === 'penalty' || selectedType === 'delay-penalty' || selectedType === 'expulsion' || selectedType === 'disqualification';
@@ -74,18 +116,48 @@ export default function SanctionDialog({ onClose }: Props) {
             {step === 'category' && 'Sanction Type'}
             {step === 'delay-sub' && 'Delay Type'}
             {step === 'team' && 'Select Team'}
+            {step === 'recipient' && 'Who Received It?'}
             {step === 'player' && 'Player Number'}
+            {step === 'double-prompt' && 'Double Sanction?'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
         <div className="p-4">
+          {/* Banner when collecting second sanction */}
+          {firstSanction && step !== 'double-prompt' && (
+            <div className="bg-amber-900/50 border border-amber-500 text-amber-200 rounded-lg px-3 py-2 mb-3 text-sm text-center">
+              Recording second sanction
+            </div>
+          )}
+
+          {/* Step: Double sanction prompt */}
+          {step === 'double-prompt' && (
+            <div className="flex flex-col gap-3">
+              <p className="text-slate-300 text-sm text-center">
+                Another sanction on this dead ball?
+              </p>
+              <button
+                onClick={handleYesDouble}
+                className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-4 rounded-lg font-bold text-lg transition-colors"
+              >
+                Yes — Add Second Sanction
+              </button>
+              <button
+                onClick={handleNoDouble}
+                className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-4 rounded-lg font-bold text-lg transition-colors"
+              >
+                No — Record Single Sanction
+              </button>
+            </div>
+          )}
+
           {/* Step 1: Category */}
           {step === 'category' && (
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => handleCategory('delay')}
-                className="bg-orange-700 text-white px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80"
+                className="bg-blue-700 text-white px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80"
               >
                 Delay
                 <span className="block text-xs font-normal opacity-80 mt-0.5">Warning or Penalty</span>
@@ -109,14 +181,14 @@ export default function SanctionDialog({ onClose }: Props) {
               </button>
               <button
                 onClick={() => handleCategory('expulsion')}
-                className="bg-red-800 text-white px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80"
+                className="bg-black text-white px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80 border border-slate-600"
               >
                 Expulsion
                 <span className="block text-xs font-normal opacity-80 mt-0.5">Player removed for rest of set</span>
               </button>
               <button
                 onClick={() => handleCategory('disqualification')}
-                className="bg-red-950 text-white px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80"
+                className="bg-black text-red-500 px-4 py-3 rounded-lg font-bold text-sm text-left active:opacity-80 border border-slate-600"
               >
                 Disqualification
                 <span className="block text-xs font-normal opacity-80 mt-0.5">Player removed for rest of match</span>
@@ -172,7 +244,26 @@ export default function SanctionDialog({ onClose }: Props) {
             </div>
           )}
 
-          {/* Step 3: Player number */}
+          {/* Step 3: Recipient selection */}
+          {step === 'recipient' && (
+            <div className="flex flex-col gap-2">
+              {RECIPIENT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleSelectRecipient(opt.value)}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg font-bold text-sm text-left transition-colors flex items-center gap-3"
+                >
+                  <span className="bg-slate-500 text-white w-8 h-8 rounded flex items-center justify-center font-mono text-base">
+                    {opt.symbol}
+                  </span>
+                  {opt.label}
+                </button>
+              ))}
+              <button onClick={() => setStep('team')} className="text-slate-400 text-sm mt-1">Back</button>
+            </div>
+          )}
+
+          {/* Step 4: Player number */}
           {step === 'player' && (
             <div className="flex flex-col gap-3">
               <p className="text-slate-300 text-sm">
@@ -204,7 +295,7 @@ export default function SanctionDialog({ onClose }: Props) {
                   Confirm
                 </button>
               </div>
-              <button onClick={() => setStep('team')} className="text-slate-400 text-sm">Back</button>
+              <button onClick={() => setStep('recipient')} className="text-slate-400 text-sm">Back</button>
             </div>
           )}
         </div>

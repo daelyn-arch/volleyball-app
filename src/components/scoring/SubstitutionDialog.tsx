@@ -12,7 +12,7 @@ interface Props {
 
 export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Props) {
   const state = useMatchStore();
-  const { homeTeam, awayTeam, recordSubstitution, addPlayerToRoster } = state;
+  const { homeTeam, awayTeam, recordSubstitution, recordExceptionalSubstitution, addPlayerToRoster } = state;
   const teamData = team === 'home' ? homeTeam : awayTeam;
   const rotation = getCurrentRotation(state, state.currentSetIndex);
 
@@ -21,6 +21,13 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
   const [playerInInput, setPlayerInInput] = useState('');
   const [showAddPrompt, setShowAddPrompt] = useState<number | null>(null);
   const [error, setError] = useState('');
+
+  // Exceptional substitution state (injury bypass)
+  const [exceptionalMode, setExceptionalMode] = useState(false);
+  const [exceptionalOut, setExceptionalOut] = useState<number | null>(null);
+  const [exceptionalIn, setExceptionalIn] = useState<number | null>(null);
+  const [exceptionalInInput, setExceptionalInInput] = useState('');
+  const [showExceptionalAddPrompt, setShowExceptionalAddPrompt] = useState<number | null>(null);
 
   const subCount = getSubCount(state.events, state.currentSetIndex, team);
   const maxSubs = state.config.maxSubsPerSet;
@@ -53,6 +60,43 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
 
   const eligibleOut = Object.keys(legalPairings).map(Number);
   const eligibleIn = playerOut !== null ? (legalPairings[playerOut] || []) : [];
+
+  // Exceptional sub: all court players and all bench players (no validation)
+  const allCourtPlayers = onCourt.filter((n) => !liberoNumbers.has(n));
+  const exceptionalBench = teamData.roster
+    .filter((p) => !onCourt.includes(p.number))
+    .map((p) => p.number);
+
+  function handleExceptionalInInput(val: string) {
+    setExceptionalInInput(val);
+    setShowExceptionalAddPrompt(null);
+    const num = parseInt(val, 10);
+    if (isNaN(num) || val === '') {
+      setExceptionalIn(null);
+      return;
+    }
+    if (exceptionalBench.includes(num)) {
+      setExceptionalIn(num);
+    } else if (num > 0) {
+      setExceptionalIn(null);
+      setShowExceptionalAddPrompt(num);
+    } else {
+      setExceptionalIn(null);
+    }
+  }
+
+  function handleExceptionalAddPlayer(num: number) {
+    addPlayerToRoster(team, num);
+    setExceptionalIn(num);
+    setShowExceptionalAddPrompt(null);
+    setExceptionalInInput(String(num));
+  }
+
+  function handleExceptionalConfirm() {
+    if (exceptionalOut === null || exceptionalIn === null) return;
+    recordExceptionalSubstitution(team, exceptionalIn, exceptionalOut);
+    onClose();
+  }
 
   function handleSelectOut(num: number) {
     setPlayerOut(num);
@@ -120,13 +164,100 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
           {preSelectedOut != null ? <>Substitution: <span className="text-orange-400">#{preSelectedOut}</span> For</> : 'Substitution'}
         </h2>
 
-        {subsRemaining <= 0 ? (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 rounded-lg px-3 py-3 mb-4 text-center">
-            Maximum substitutions reached for this set
+        {exceptionalMode ? (
+          <>
+            <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-200 rounded-lg px-3 py-2 mb-4 text-sm text-center">
+              Exceptional Substitution — Bypasses normal limits
+            </div>
+
+            {/* Player Out */}
+            <div className="mb-4">
+              <label className="block text-sm text-slate-400 mb-2">Injured Player (OUT)</label>
+              <div className="grid grid-cols-4 gap-2">
+                {allCourtPlayers.map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => { setExceptionalOut(num); setExceptionalIn(null); setExceptionalInInput(''); setShowExceptionalAddPrompt(null); }}
+                    className={`py-2 rounded-lg text-base font-bold transition-colors ${
+                      exceptionalOut === num
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-slate-700 text-white hover:bg-slate-600'
+                    }`}
+                  >
+                    #{num}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Player In */}
+            {exceptionalOut !== null && (
+              <div className="mb-4">
+                <label className="block text-sm text-slate-400 mb-2">Replacement Player (IN)</label>
+                <div className="relative mb-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="Enter jersey #"
+                    value={exceptionalInInput}
+                    onChange={(e) => handleExceptionalInInput(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg bg-slate-700 text-white text-lg font-bold border-2 ${
+                      exceptionalIn !== null ? 'border-green-500' : 'border-slate-600'
+                    } focus:outline-none focus:border-green-400`}
+                  />
+                </div>
+                {showExceptionalAddPrompt !== null && (
+                  <div className="bg-amber-900/50 border border-amber-500 rounded-lg px-3 py-3 mb-2 flex items-center justify-between">
+                    <span className="text-amber-200 text-sm">#{showExceptionalAddPrompt} not on roster. Add?</span>
+                    <div className="flex gap-2 ml-3 shrink-0">
+                      <button onClick={() => handleExceptionalAddPlayer(showExceptionalAddPrompt)} className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded-lg font-semibold">Yes</button>
+                      <button onClick={() => { setShowExceptionalAddPrompt(null); setExceptionalInInput(''); }} className="bg-slate-600 hover:bg-slate-500 text-white text-sm px-3 py-1 rounded-lg font-semibold">No</button>
+                    </div>
+                  </div>
+                )}
+                {exceptionalBench.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {exceptionalBench.map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => { setExceptionalIn(num); setExceptionalInInput(String(num)); setShowExceptionalAddPrompt(null); }}
+                        className={`py-2 rounded-lg text-base font-bold transition-colors ${
+                          exceptionalIn === num
+                            ? 'bg-green-600 text-white'
+                            : 'bg-slate-700 text-white hover:bg-slate-600'
+                        }`}
+                      >
+                        #{num}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : subsRemaining <= 0 ? (
+          <div className="mb-4">
+            <div className="bg-red-900/50 border border-red-500 text-red-200 rounded-lg px-3 py-3 mb-3 text-center">
+              Maximum substitutions reached for this set
+            </div>
+            <button
+              onClick={() => setExceptionalMode(true)}
+              className="w-full bg-yellow-700/60 hover:bg-yellow-700 border border-yellow-600 text-yellow-200 py-2.5 rounded-lg font-bold text-sm transition-colors"
+            >
+              Exceptional Sub (Injury)
+            </button>
           </div>
         ) : eligibleOut.length === 0 ? (
-          <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-200 rounded-lg px-3 py-3 mb-4 text-center">
-            No legal substitutions available
+          <div className="mb-4">
+            <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-200 rounded-lg px-3 py-3 mb-3 text-center">
+              No legal substitutions available
+            </div>
+            <button
+              onClick={() => setExceptionalMode(true)}
+              className="w-full bg-yellow-700/60 hover:bg-yellow-700 border border-yellow-600 text-yellow-200 py-2.5 rounded-lg font-bold text-sm transition-colors"
+            >
+              Exceptional Sub (Injury)
+            </button>
           </div>
         ) : (
           <>
@@ -237,7 +368,15 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
           >
             Cancel
           </button>
-          {subsRemaining > 0 && (
+          {exceptionalMode ? (
+            <button
+              onClick={handleExceptionalConfirm}
+              disabled={exceptionalOut === null || exceptionalIn === null}
+              className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-700 disabled:text-slate-500 text-white py-3 rounded-xl font-semibold transition-colors"
+            >
+              Confirm Exceptional Sub
+            </button>
+          ) : subsRemaining > 0 && (
             <button
               onClick={handleConfirm}
               disabled={playerOut === null || playerIn === null}

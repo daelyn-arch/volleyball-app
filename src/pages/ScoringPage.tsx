@@ -10,6 +10,7 @@ import UndoButton from '@/components/scoring/UndoButton';
 import EventLog from '@/components/scoring/EventLog';
 import LiberoPanel from '@/components/scoring/LiberoPanel';
 import SanctionDialog from '@/components/scoring/SanctionDialog';
+import OverwriteDialog from '@/components/scoring/OverwriteDialog';
 import type { Lineup, TeamSide } from '@/types/match';
 
 export default function ScoringPage() {
@@ -26,12 +27,14 @@ export default function ScoringPage() {
     decrementPoint,
     undo,
     advanceToNextSet,
+    addRemark,
   } = state;
 
   const { showConfirm } = useDialog();
   const [showSubDialog, setShowSubDialog] = useState<{ team: TeamSide; playerOut?: number } | null>(null);
   const [showLiberoPanel, setShowLiberoPanel] = useState<'home' | 'away' | null>(null);
   const [showSanctionDialog, setShowSanctionDialog] = useState(false);
+  const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
   const [subHint, setSubHint] = useState(0);
 
   const score = getSetScore(events, currentSetIndex);
@@ -49,6 +52,24 @@ export default function ScoringPage() {
   const hasLiberoAway = awayTeam.roster.some((p) => p.isLibero);
   const homeLiberoNums = new Set(homeTeam.roster.filter((p) => p.isLibero).map((p) => p.number));
   const awayLiberoNums = new Set(awayTeam.roster.filter((p) => p.isLibero).map((p) => p.number));
+
+  // Compute expelled/disqualified players in the current set (need mandatory sub)
+  const expelledHome = new Set<number>();
+  const expelledAway = new Set<number>();
+  for (const e of events) {
+    if (e.setIndex !== currentSetIndex) continue;
+    if (e.type === 'sanction' && (e.sanctionType === 'expulsion' || e.sanctionType === 'disqualification') && e.sanctionRecipient === 'player' && e.playerNumber) {
+      if (e.team === 'home') expelledHome.add(e.playerNumber);
+      else expelledAway.add(e.playerNumber);
+    }
+    // If a sub replaced the expelled player, remove them from the set
+    if (e.type === 'substitution') {
+      if (e.team === 'home') expelledHome.delete(e.playerOut);
+      else expelledAway.delete(e.playerOut);
+    }
+  }
+
+  const hasExpelled = expelledHome.size > 0 || expelledAway.size > 0;
 
   const homeServing = rotation?.servingTeam === 'home';
   const awayServing = rotation?.servingTeam === 'away';
@@ -77,16 +98,38 @@ export default function ScoringPage() {
             <span className="text-yellow-400 ml-1">(Deciding)</span>
           )}
         </div>
-        <button
-          onClick={async () => {
-            const ok = await showConfirm('Leave Match?', 'Your match progress is saved.');
-            if (ok) navigate('/');
-          }}
-          className="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
-          style={{ width: 60, height: 30 }}
-        >
-          Leave
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const note = window.prompt('Add a note to the scoresheet remarks:');
+              if (note && note.trim()) {
+                const score = getSetScore(events, currentSetIndex);
+                addRemark(`Set ${currentSetIndex + 1} (${score.home}:${score.away}): ${note.trim()}`);
+              }
+            }}
+            className="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
+            style={{ width: 60, height: 30 }}
+          >
+            Note
+          </button>
+          <button
+            onClick={() => setShowOverwriteDialog(true)}
+            className="bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
+            style={{ width: 60, height: 30 }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={async () => {
+              const ok = await showConfirm('Leave Match?', 'Your match progress is saved.');
+              if (ok) navigate('/');
+            }}
+            className="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
+            style={{ width: 60, height: 30 }}
+          >
+            Leave
+          </button>
+        </div>
       </div>
 
       {/* Centering wrapper: pushes panels+log to vertical center */}
@@ -107,6 +150,8 @@ export default function ScoringPage() {
           maxTimeouts={config.maxTimeoutsPerSet}
           hasLibero={hasLiberoHome}
           liberoNums={homeLiberoNums}
+          expelledPlayers={expelledHome}
+          pointsBlocked={hasExpelled}
           onPoint={() => { setSubHint(0); awardPoint('home'); }}
           onDecrement={() => { setSubHint(0); decrementPoint('home'); }}
           onLibero={() => { setSubHint(0); setShowLiberoPanel('home'); }}
@@ -127,6 +172,8 @@ export default function ScoringPage() {
           maxTimeouts={config.maxTimeoutsPerSet}
           hasLibero={hasLiberoAway}
           liberoNums={awayLiberoNums}
+          expelledPlayers={expelledAway}
+          pointsBlocked={hasExpelled}
           onPoint={() => { setSubHint(0); awardPoint('away'); }}
           onDecrement={() => { setSubHint(0); decrementPoint('away'); }}
           onLibero={() => { setSubHint(0); setShowLiberoPanel('away'); }}
@@ -144,6 +191,7 @@ export default function ScoringPage() {
           <>
             <div className="flex gap-1.5 items-center w-full" style={{ marginTop: '-5px' }}>
               <UndoButton onUndo={undo} disabled={events.length === 0} lastEvent={events[events.length - 1]} />
+              <button data-name="ref-btn" onClick={() => { setSubHint(0); setShowSanctionDialog(true); }} disabled={setComplete} className={`flex-1 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Ref</button>
               {setComplete && !matchComplete ? (
                 <button
                   data-name="next-set-btn"
@@ -161,10 +209,14 @@ export default function ScoringPage() {
                   <button type="button" onClick={() => setSubHint(n => n + 1)} className={`flex-1 bg-red-700 text-orange-400 text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - awaySubCount}</span>)</button>
                 </>
               )}
-              <button data-name="ref-btn" onClick={() => { setSubHint(0); setShowSanctionDialog(true); }} className="flex-1 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center">Ref</button>
               <button data-name="scoresheet-btn" onClick={() => { setSubHint(0); navigate('/scoresheet'); }} className={`flex-1 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center ${setComplete ? 'animate-gold-pulse' : 'bg-slate-600 hover:bg-slate-500'}`}>Scoresheet</button>
             </div>
-            {subHint > 0 && !setComplete && (
+            {hasExpelled && !setComplete && (
+              <div className="text-red-400 text-xs mt-1 text-center font-bold">
+                A player must be subbed in for {[...expelledHome, ...expelledAway].map(n => `#${n}`).join(', ')}
+              </div>
+            )}
+            {subHint > 0 && !setComplete && !hasExpelled && (
               <div className="text-yellow-400 text-xs mt-1 text-center">To make a Substitution select a Player Number</div>
             )}
           </>
@@ -187,6 +239,9 @@ export default function ScoringPage() {
       {showSanctionDialog && (
         <SanctionDialog onClose={() => setShowSanctionDialog(false)} />
       )}
+      {showOverwriteDialog && (
+        <OverwriteDialog onClose={() => setShowOverwriteDialog(false)} />
+      )}
     </div>
   );
 }
@@ -205,6 +260,8 @@ interface TeamPanelProps {
   maxTimeouts: number;
   hasLibero: boolean;
   liberoNums: Set<number>;
+  expelledPlayers: Set<number>;
+  pointsBlocked: boolean;
   onPoint: () => void;
   onDecrement: () => void;
   onLibero: () => void;
@@ -224,6 +281,8 @@ function TeamPanel({
   maxTimeouts,
   hasLibero,
   liberoNums,
+  expelledPlayers,
+  pointsBlocked,
   onPoint,
   onDecrement,
   onLibero,
@@ -278,15 +337,15 @@ function TeamPanel({
           </div>
           {/* Front row */}
           <div data-name={`${side}-front-row`} className="grid grid-cols-3 gap-1">
-            <RotCell num={lineup[4]} name={`${side}-pos-IV`} isLibero={liberoNums.has(lineup[4])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
-            <RotCell num={lineup[3]} name={`${side}-pos-III`} isLibero={liberoNums.has(lineup[3])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
-            <RotCell num={lineup[2]} name={`${side}-pos-II`} isLibero={liberoNums.has(lineup[2])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[4]} name={`${side}-pos-IV`} isLibero={liberoNums.has(lineup[4])} expelled={expelledPlayers.has(lineup[4])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[3]} name={`${side}-pos-III`} isLibero={liberoNums.has(lineup[3])} expelled={expelledPlayers.has(lineup[3])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[2]} name={`${side}-pos-II`} isLibero={liberoNums.has(lineup[2])} expelled={expelledPlayers.has(lineup[2])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
           </div>
           {/* Back row */}
           <div data-name={`${side}-back-row`} className="grid grid-cols-3 gap-1 mt-1">
-            <RotCell num={lineup[5]} name={`${side}-pos-V`} isLibero={liberoNums.has(lineup[5])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
-            <RotCell num={lineup[6]} name={`${side}-pos-VI`} isLibero={liberoNums.has(lineup[6])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
-            <RotCell num={lineup[1]} name={`${side}-pos-I`} serve={isServing} isLibero={liberoNums.has(lineup[1])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[5]} name={`${side}-pos-V`} isLibero={liberoNums.has(lineup[5])} expelled={expelledPlayers.has(lineup[5])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[6]} name={`${side}-pos-VI`} isLibero={liberoNums.has(lineup[6])} expelled={expelledPlayers.has(lineup[6])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
+            <RotCell num={lineup[1]} name={`${side}-pos-I`} serve={isServing} isLibero={liberoNums.has(lineup[1])} expelled={expelledPlayers.has(lineup[1])} onTap={!setComplete ? onSubPlayer : undefined} highlight={highlightSub} />
           </div>
           {/* Back-side labels */}
           <div data-name={`${side}-back-labels`} className="grid grid-cols-3 gap-1 text-center">
@@ -298,48 +357,48 @@ function TeamPanel({
       )}
 
       {/* Point Buttons */}
-      {!setComplete && (
-        <div data-name={`${side}-point-buttons`} className="flex">
-          <button
-            data-name={`${side}-plus-btn`}
-            onClick={onPoint}
-            className={`flex-1 ${pointBg} text-white text-2xl font-bold py-2 rounded-l-lg transition-colors active:scale-95 touch-manipulation`}
-          >
-            +
-          </button>
-          <button
-            data-name={`${side}-minus-btn`}
-            onClick={onDecrement}
-            className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-2 rounded-r-lg transition-colors active:scale-95 touch-manipulation"
-          >
-            −
-          </button>
-        </div>
-      )}
+      <div data-name={`${side}-point-buttons`} className={`flex ${setComplete || pointsBlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+        <button
+          data-name={`${side}-plus-btn`}
+          onClick={onPoint}
+          disabled={setComplete || pointsBlocked}
+          className={`flex-1 ${pointBg} text-white text-2xl font-bold py-2 rounded-l-lg transition-colors active:scale-95 touch-manipulation`}
+        >
+          +
+        </button>
+        <button
+          data-name={`${side}-minus-btn`}
+          onClick={onDecrement}
+          disabled={setComplete || pointsBlocked}
+          className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-2 rounded-r-lg transition-colors active:scale-95 touch-manipulation"
+        >
+          −
+        </button>
+      </div>
     </div>
   );
 }
 
 // ── Rotation Cell ────────────────────────────────────────────
 
-function RotCell({ num, serve, name, isLibero, onTap, highlight }: { num: number; serve?: boolean; name: string; isLibero?: boolean; onTap?: (playerNum: number) => void; highlight?: number }) {
+function RotCell({ num, serve, name, isLibero, expelled, onTap, highlight }: { num: number; serve?: boolean; name: string; isLibero?: boolean; expelled?: boolean; onTap?: (playerNum: number) => void; highlight?: number }) {
   return (
     <button
       key={highlight || 0}
       type="button"
       data-name={name}
       onClick={onTap ? () => onTap(num) : undefined}
-      className={`relative overflow-hidden rounded px-1 py-1.5 text-center text-base font-bold transition-colors touch-manipulation bg-slate-700 active:bg-slate-600 ${
-        serve ? 'text-yellow-400 ring-1 ring-yellow-400' : 'text-white'
+      className={`relative overflow-hidden rounded px-1 py-1.5 text-center text-base font-bold transition-colors touch-manipulation ${expelled ? 'bg-red-900/60 ring-2 ring-red-500 animate-pulse' : 'bg-slate-700 active:bg-slate-600'} ${
+        serve ? 'text-yellow-400 ring-1 ring-yellow-400' : expelled ? 'text-red-400' : 'text-white'
       } ${highlight ? (serve ? 'animate-sub-pulse-server' : 'animate-sub-pulse') : ''}`}
     >
-      {isLibero && (
+      {isLibero && !expelled && (
         <svg className="absolute inset-0 w-full h-full" viewBox="0 0 40 40" preserveAspectRatio="none">
           <polygon points="0,40 20,4 40,40" fill="#0f766e" opacity="0.7" />
         </svg>
       )}
-      <span className="relative z-10">{num}</span>
-      {serve && (
+      <span className="relative z-10">{expelled ? '!' : num}</span>
+      {serve && !expelled && (
         <svg className="absolute top-1/2 -translate-y-1/2 right-0.5 w-3 h-3 text-yellow-400 z-10" fill="currentColor" viewBox="0 0 20 20">
           <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.5" />
           <circle cx="10" cy="10" r="3.5" />

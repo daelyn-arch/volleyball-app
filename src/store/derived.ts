@@ -25,9 +25,9 @@ export function getSetEvents(events: MatchEvent[], setIndex: number): MatchEvent
 
 /** Get current score for a set from events */
 export function getSetScore(events: MatchEvent[], setIndex: number): Score {
-  const pointEvents = getSetEvents(events, setIndex).filter((e) => e.type === 'point');
-  if (pointEvents.length === 0) return { home: 0, away: 0 };
-  const last = pointEvents[pointEvents.length - 1];
+  const scoreEvents = getSetEvents(events, setIndex).filter((e) => e.type === 'point' || e.type === 'correction');
+  if (scoreEvents.length === 0) return { home: 0, away: 0 };
+  const last = scoreEvents[scoreEvents.length - 1];
   return { home: last.homeScore, away: last.awayScore };
 }
 
@@ -92,6 +92,10 @@ export function getCurrentRotation(state: MatchState, setIndex?: number): Rotati
       }
       if (event.team === 'home') homeLineup = { ...lineup };
       else awayLineup = { ...lineup };
+    } else if (event.type === 'correction') {
+      homeLineup = { ...event.homeLineup };
+      awayLineup = { ...event.awayLineup };
+      servingTeam = event.servingTeam;
     }
   }
 
