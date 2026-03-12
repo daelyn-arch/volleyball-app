@@ -1,4 +1,5 @@
 import { useMatchStore } from '@/store/matchStore';
+import { useDialog } from '@/components/ThemedDialog';
 import type { TeamSide } from '@/types/match';
 
 interface Props {
@@ -10,11 +11,12 @@ interface Props {
 
 export default function TimeoutButton({ team, count, max, disabled }: Props) {
   const recordTimeout = useMatchStore((s) => s.recordTimeout);
+  const { showAlert } = useDialog();
 
   function handleClick() {
     const error = recordTimeout(team);
     if (error) {
-      alert(error);
+      showAlert('Timeout Error', error);
     }
   }
 

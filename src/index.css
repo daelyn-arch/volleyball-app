@@ -12,9 +12,50 @@ html, body, #root {
 }
 
 body {
+  overscroll-behavior: none;
+}
+
+/* Hide scrollbars but keep scrolling */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+body {
   font-family: system-ui, -apple-system, sans-serif;
   background: #0f172a;
   color: #e2e8f0;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+}
+
+@keyframes sub-pulse-synced {
+  0%      { box-shadow: 0 0 0 1px #f97316; }
+  100%    { box-shadow: 0 0 0 0 transparent; }
+}
+
+.animate-sub-pulse {
+  animation: sub-pulse-synced 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes sub-pulse-server {
+  0%      { box-shadow: 0 0 0 1px #f97316; }
+  100%    { box-shadow: 0 0 0 1px #facc15; }
+}
+
+.animate-sub-pulse-server {
+  animation: sub-pulse-server 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes gold-pulse {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.animate-gold-pulse {
+  animation: gold-pulse 1.5s ease-in-out infinite;
+  background-color: #ca8a04 !important;
 }

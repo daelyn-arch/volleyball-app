@@ -72,7 +72,7 @@ export interface SanctionEvent extends BaseEvent {
   type: 'sanction';
   team: TeamSide;
   playerNumber?: number;
-  sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification';
+  sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty';
   homeScore: number;
   awayScore: number;
 }

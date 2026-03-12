@@ -15,8 +15,10 @@ export default defineConfig({
         name: 'Volleyball Scorekeeper',
         short_name: 'VBScore',
         description: 'USAV volleyball scorekeeping app',
-        theme_color: '#1e40af',
+        theme_color: '#0f172a',
         background_color: '#0f172a',
+        start_url: '/',
+        scope: '/',
         display: 'standalone',
         orientation: 'any',
         icons: [

@@ -513,6 +513,41 @@ export async function fillScoresheet(state: MatchState): Promise<Blob> {
     }
   }
 
+  // ── Sanctions / Improper Requests ──
+  const sanctionEvents = state.events.filter(
+    (e): e is import('@/types/match').SanctionEvent => e.type === 'sanction'
+  );
+  sanctionEvents.forEach((e, idx) => {
+    if (idx >= 5) return; // max 5 rows
+    const row = idx + 1;
+    const teamLetter = e.team === 'home' ? 'A' : 'B';
+
+    // Mark the type column
+    if (e.sanctionType === 'warning') {
+      safeSetField(form, `yellow_card_${row}`, 'X', TextAlignment.Center);
+    } else if (e.sanctionType === 'penalty') {
+      safeSetField(form, `red_card_${row}`, 'X', TextAlignment.Center);
+    } else if (e.sanctionType === 'delay-warning') {
+      safeSetField(form, `yellow_card_${row}`, 'D', TextAlignment.Center);
+    } else if (e.sanctionType === 'delay-penalty') {
+      safeSetField(form, `red_card_${row}`, 'D', TextAlignment.Center);
+    } else if (e.sanctionType === 'expulsion') {
+      safeSetField(form, `explusion_${row}`, 'X', TextAlignment.Center);
+    } else if (e.sanctionType === 'disqualification') {
+      safeSetField(form, `disqualified_${row}`, 'X', TextAlignment.Center);
+    }
+
+    // Team, set, and score
+    safeSetField(form, `penalized_team_${row}`, teamLetter, TextAlignment.Center);
+    safeSetField(form, `penalty_current_set_${row}`, String(e.setIndex + 1), TextAlignment.Center);
+    safeSetField(form, `penalty_current_score_${row}`, `${e.homeScore}:${e.awayScore}`, TextAlignment.Center);
+
+    // Player number if present
+    if (e.playerNumber) {
+      safeSetField(form, `penalized_player_${row}`, String(e.playerNumber), TextAlignment.Center);
+    }
+  });
+
   // ── Set Results ──
   for (let si = 0; si < 2 && si <= state.currentSetIndex; si++) {
     const score = getSetScore(state.events, si);

@@ -13,12 +13,12 @@ export default function ScoresheetSet({ summary, state }: Props) {
   return (
     <div className="mb-8 border-2 border-black rounded-lg overflow-hidden">
       {/* Set Header */}
-      <div className="bg-gray-200 px-4 py-2 flex justify-between items-center border-b-2 border-black">
-        <span className="font-bold text-lg">Set {setIndex + 1}</span>
-        <span className="font-bold">
-          {homeScore} - {awayScore}
+      <div className="bg-gray-200 px-4 py-2 flex justify-between items-center border-b-2 border-black gap-2 min-w-0">
+        <span className="font-bold text-lg whitespace-nowrap shrink-0">Set {setIndex + 1}</span>
+        <span className="font-bold text-right min-w-0">
+          <span className="whitespace-nowrap">{homeScore} - {awayScore}</span>
           {winner && (
-            <span className="ml-2 text-sm text-gray-600">
+            <span className="ml-2 text-sm text-gray-600 truncate">
               Won by {winner === 'home' ? state.homeTeam.name : state.awayTeam.name}
             </span>
           )}
@@ -111,10 +111,11 @@ function LineupColumn({
 }) {
   const positions = ['I', 'II', 'III', 'IV', 'V', 'VI'];
   return (
-    <div className={`${bg} p-3 border-r border-gray-300`}>
-      <div className="font-bold text-sm mb-1">
-        {teamName} {firstServe && '(First Serve)'}
+    <div className={`${bg} p-3 border-r border-gray-300 min-w-0`}>
+      <div className="font-bold text-sm mb-1 truncate">
+        {teamName}
       </div>
+      {firstServe && <div className="text-xs text-gray-500 mb-1">(First Serve)</div>}
       {lineup ? (
         <div className="grid grid-cols-6 gap-1 text-center text-xs">
           {positions.map((label, i) => (

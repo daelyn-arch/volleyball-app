@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { useDialog } from '@/components/ThemedDialog';
 
 // Set worker source
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -38,6 +39,7 @@ const FIELD_CATEGORIES = [
 ];
 
 export default function CalibrationPage() {
+  const { showAlert } = useDialog();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [selectedTemplate, setSelectedTemplate] = useState(0);
@@ -155,7 +157,7 @@ export default function CalibrationPage() {
 
     if (mode === 'click') {
       if (!currentLabel) {
-        alert('Enter a label first');
+        showAlert('Missing Label', 'Enter a label first');
         return;
       }
       const pt: MarkedPoint = {

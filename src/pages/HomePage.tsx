@@ -1,8 +1,23 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
+import { useDialog } from '@/components/ThemedDialog';
 
 export default function HomePage() {
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, []);
   const navigate = useNavigate();
+  const { showConfirm } = useDialog();
   const matchId = useMatchStore((s) => s.id);
   const matchComplete = useMatchStore((s) => s.matchComplete);
   const homeTeam = useMatchStore((s) => s.homeTeam);
@@ -45,9 +60,10 @@ export default function HomePage() {
         )}
 
         <button
-          onClick={() => {
+          onClick={async () => {
             if (hasActiveMatch) {
-              if (!confirm('This will end the current match. Continue?')) return;
+              const ok = await showConfirm('End Current Match?', 'This will end the current match and start a new one.');
+              if (!ok) return;
             }
             resetMatch();
             navigate('/setup');

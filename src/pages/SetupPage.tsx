@@ -64,7 +64,6 @@ export default function SetupPage() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         {/* Match format */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Match Format</label>
           <div className="flex gap-3">
             <button
               type="button"
@@ -94,7 +93,7 @@ export default function SetupPage() {
         {/* Team names */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-slate-800 rounded-xl p-4 border-2 border-blue-600">
-            <h2 className="text-xl font-bold text-blue-400 mb-3">Home Team</h2>
+            <h2 className="text-xl font-bold text-blue-400 mb-3">Left Side</h2>
             <input
               type="text"
               placeholder="Team Name"
@@ -105,7 +104,7 @@ export default function SetupPage() {
           </div>
 
           <div className="bg-slate-800 rounded-xl p-4 border-2 border-red-700">
-            <h2 className="text-xl font-bold text-red-400 mb-3">Away Team</h2>
+            <h2 className="text-xl font-bold text-red-400 mb-3">Right Side</h2>
             <input
               type="text"
               placeholder="Team Name"

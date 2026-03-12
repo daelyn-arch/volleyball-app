@@ -78,6 +78,9 @@ interface MatchActions {
     isLiberoEntering: boolean
   ) => string | null;
 
+  // Sanctions
+  recordSanction: (team: TeamSide, sanctionType: 'warning' | 'penalty' | 'expulsion' | 'disqualification' | 'delay-warning' | 'delay-penalty', playerNumber?: number) => void;
+
   // Undo
   undo: () => void;
 
@@ -413,6 +416,56 @@ export const useMatchStore = create<MatchStore>()(
 
         set({ events: [...state.events, event] });
         return null;
+      },
+
+      recordSanction: (team, sanctionType, playerNumber) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+        const currentScore = getSetScore(state.events, setIndex);
+
+        // Sanctions that award a point to the opposing team
+        const awardsPoint = sanctionType === 'penalty' || sanctionType === 'delay-penalty' || sanctionType === 'expulsion' || sanctionType === 'disqualification';
+        const opposingTeam = team === 'home' ? 'away' : 'home';
+
+        const scoreAfter = awardsPoint
+          ? { home: currentScore.home + (opposingTeam === 'home' ? 1 : 0), away: currentScore.away + (opposingTeam === 'away' ? 1 : 0) }
+          : currentScore;
+
+        const newEvents: MatchEvent[] = [];
+
+        const sanctionEvent: MatchEvent = {
+          type: 'sanction',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team,
+          sanctionType,
+          playerNumber,
+          homeScore: currentScore.home,
+          awayScore: currentScore.away,
+        };
+        newEvents.push(sanctionEvent);
+
+        // If it awards a point, also record the point event
+        if (awardsPoint) {
+          const rotation = getCurrentRotation(state, setIndex);
+          const serverNumber = rotation ? getServer(rotation.servingTeam === 'home' ? rotation.homeLineup : rotation.awayLineup) : 0;
+
+          const pointEvent: MatchEvent = {
+            type: 'point',
+            id: generateId(),
+            timestamp: Date.now(),
+            setIndex,
+            scoringTeam: opposingTeam,
+            servingTeam: rotation?.servingTeam ?? 'home',
+            serverNumber,
+            homeScore: scoreAfter.home,
+            awayScore: scoreAfter.away,
+          };
+          newEvents.push(pointEvent);
+        }
+
+        set({ events: [...state.events, ...newEvents] });
       },
 
       undo: () => {
