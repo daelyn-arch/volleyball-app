@@ -148,8 +148,8 @@ export interface MatchState {
   matchComplete: boolean;
   /** Optional match metadata for PDF */
   metadata: MatchMetadata;
-  /** Track libero serving rotation per set. Key: `${setIndex}-${team}`, value: position */
-  liberoServingPositions: Record<string, CourtPosition | null>;
+  /** Track libero serving rotation per set. Key: `${setIndex}-${team}`, value: which libero replaces which player */
+  liberoServingPositions: Record<string, { liberoNumber: number; replacedPlayer: number } | null>;
   /** Score correction remarks for the PDF */
   remarks: string[];
 }

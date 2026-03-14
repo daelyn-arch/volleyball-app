@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMatchStore } from '@/store/matchStore';
+import { hasDelayWarning } from '@/store/validators';
 import type { TeamSide, SanctionRecipient } from '@/types/match';
 
 interface Props {
@@ -27,8 +28,12 @@ export default function SanctionDialog({ onClose }: Props) {
 
   const homeTeam = useMatchStore((s) => s.homeTeam);
   const awayTeam = useMatchStore((s) => s.awayTeam);
+  const events = useMatchStore((s) => s.events);
   const recordSanction = useMatchStore((s) => s.recordSanction);
   const recordDoubleSanction = useMatchStore((s) => s.recordDoubleSanction);
+
+  const homeHasDelayWarn = hasDelayWarning(events, 'home');
+  const awayHasDelayWarn = hasDelayWarning(events, 'away');
 
   function handleCategory(cat: Category) {
     if (cat === 'delay') {
@@ -52,9 +57,17 @@ export default function SanctionDialog({ onClose }: Props) {
 
   function handleSelectTeam(team: TeamSide) {
     setSelectedTeam(team);
+
+    let type = selectedType;
+    // USAV: delay warning is per-match — auto-upgrade if team already warned
+    if (type === 'delay-warning' && hasDelayWarning(events, team)) {
+      type = 'delay-penalty';
+      setSelectedType(type);
+    }
+
     // Delays are team-level, skip recipient/player
-    if (selectedType === 'delay-warning' || selectedType === 'delay-penalty') {
-      finishSanction({ team, sanctionType: selectedType });
+    if (type === 'delay-warning' || type === 'delay-penalty') {
+      finishSanction({ team, sanctionType: type });
     } else {
       setStep('recipient');
     }
@@ -199,12 +212,19 @@ export default function SanctionDialog({ onClose }: Props) {
           {/* Step 1b: Delay sub-type */}
           {step === 'delay-sub' && (
             <div className="flex flex-col gap-3">
+              {(homeHasDelayWarn || awayHasDelayWarn) && (
+                <div className="bg-amber-900/40 border border-amber-600 text-amber-200 rounded-lg px-3 py-2 text-xs">
+                  {homeHasDelayWarn && awayHasDelayWarn
+                    ? 'Both teams already warned — next delay is a penalty'
+                    : `${homeHasDelayWarn ? homeTeam.name : awayTeam.name} already warned — their next delay is a penalty`}
+                </div>
+              )}
               <button
                 onClick={() => handleDelayType('delay-warning')}
                 className="bg-yellow-700 text-white px-4 py-4 rounded-lg font-bold text-left active:opacity-80"
               >
                 Delay Warning
-                <span className="block text-xs font-normal opacity-80 mt-0.5">No point awarded</span>
+                <span className="block text-xs font-normal opacity-80 mt-0.5">No point awarded (auto-upgrades if team already warned)</span>
               </button>
               <button
                 onClick={() => handleDelayType('delay-penalty')}

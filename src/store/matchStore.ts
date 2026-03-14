@@ -16,7 +16,7 @@ import { DEFAULT_CONFIG } from '@/utils/scoring';
 import { isSetComplete, getSetWinner, isMatchComplete } from '@/utils/scoring';
 import { getSetScore, getSetsWon, getCurrentRotation } from './derived';
 import { getServer, isFrontRow, findPlayerPosition, rotateLineup } from '@/utils/rotation';
-import { validateSubstitution, validateTimeout, validateLiberoReplacement } from './validators';
+import { validateSubstitution, validateTimeout, validateLiberoReplacement, hasDelayWarning } from './validators';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -96,6 +96,12 @@ interface MatchActions {
 
   // Exceptional Substitution
   recordExceptionalSubstitution: (team: TeamSide, playerIn: number, playerOut: number) => void;
+
+  // Two-libero swap (direct replacement without rally)
+  swapLiberos: (team: TeamSide, enteringLibero: number, exitingLibero: number, position: CourtPosition) => string | null;
+
+  // Libero redesignation after injury
+  redesignateLibero: (team: TeamSide, oldLiberoNumber: number, newLiberoNumber: number) => void;
 
   // Corrections
   applyCorrection: (homeScore: number, awayScore: number, homeLineup: Lineup, awayLineup: Lineup, servingTeam: TeamSide) => void;
@@ -436,7 +442,19 @@ export const useMatchStore = create<MatchStore>()(
           isLiberoEntering,
         };
 
-        set({ events: [...state.events, event] });
+        // Lock in libero serving position when entering at position I
+        let updatedServingPositions = state.liberoServingPositions;
+        if (isLiberoEntering && position === 1) {
+          const key = `${state.currentSetIndex}-${team}`;
+          if (!state.liberoServingPositions[key]) {
+            updatedServingPositions = {
+              ...state.liberoServingPositions,
+              [key]: { liberoNumber, replacedPlayer },
+            };
+          }
+        }
+
+        set({ events: [...state.events, event], liberoServingPositions: updatedServingPositions });
         return null;
       },
 
@@ -444,6 +462,11 @@ export const useMatchStore = create<MatchStore>()(
         const state = get();
         const setIndex = state.currentSetIndex;
         const currentScore = getSetScore(state.events, setIndex);
+
+        // USAV: delay warning is per-match — auto-upgrade to delay-penalty if team already warned
+        if (sanctionType === 'delay-warning' && hasDelayWarning(state.events, team)) {
+          sanctionType = 'delay-penalty';
+        }
 
         // Sanctions that award a point to the opposing team
         const awardsPoint = sanctionType === 'penalty' || sanctionType === 'delay-penalty' || sanctionType === 'expulsion' || sanctionType === 'disqualification';
@@ -724,6 +747,84 @@ export const useMatchStore = create<MatchStore>()(
         remarks.push(`EXCEPTIONAL SUB: #${playerIn} for #${playerOut} (injury), ${teamName}, Set ${setIndex + 1}, ${currentScore.home}-${currentScore.away}`);
 
         set({ events: [...state.events, event], remarks });
+      },
+
+      swapLiberos: (team, enteringLibero, exitingLibero, position) => {
+        const state = get();
+        const setIndex = state.currentSetIndex;
+
+        // Find the original non-libero player the exiting libero replaced
+        const originalPlayer = findLiberoOriginalPlayer(state.events, setIndex, team, exitingLibero, position);
+        if (!originalPlayer) return 'Cannot determine original player for libero swap';
+
+        // Check serving lock-in if at position I
+        let updatedServingPositions = state.liberoServingPositions;
+        if (position === 1) {
+          const key = `${setIndex}-${team}`;
+          const locked = state.liberoServingPositions[key];
+          if (locked && (locked.liberoNumber !== enteringLibero || locked.replacedPlayer !== originalPlayer)) {
+            return `Serving position locked to Libero #${locked.liberoNumber} replacing #${locked.replacedPlayer}`;
+          }
+          if (!locked) {
+            updatedServingPositions = {
+              ...state.liberoServingPositions,
+              [key]: { liberoNumber: enteringLibero, replacedPlayer: originalPlayer },
+            };
+          }
+        }
+
+        // Two atomic events: exit + enter
+        const exitEvent: MatchEvent = {
+          type: 'liberoReplacement',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team,
+          liberoNumber: exitingLibero,
+          replacedPlayer: originalPlayer,
+          position,
+          isLiberoEntering: false,
+        };
+
+        const enterEvent: MatchEvent = {
+          type: 'liberoReplacement',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          team,
+          liberoNumber: enteringLibero,
+          replacedPlayer: originalPlayer,
+          position,
+          isLiberoEntering: true,
+        };
+
+        set({
+          events: [...state.events, exitEvent, enterEvent],
+          liberoServingPositions: updatedServingPositions,
+        });
+        return null;
+      },
+
+      redesignateLibero: (team, oldLiberoNumber, newLiberoNumber) => {
+        set((state) => {
+          const teamKey = team === 'home' ? 'homeTeam' : 'awayTeam';
+          const teamData = state[teamKey];
+          const newRoster = teamData.roster.map((p) => {
+            if (p.number === oldLiberoNumber) return { ...p, isLibero: false };
+            if (p.number === newLiberoNumber) return { ...p, isLibero: true };
+            return p;
+          });
+
+          const remarks = [...(state.remarks || [])];
+          remarks.push(
+            `LIBERO REDESIGNATION: #${newLiberoNumber} replaces injured #${oldLiberoNumber}, ${teamData.name}, Set ${state.currentSetIndex + 1}`
+          );
+
+          return {
+            [teamKey]: { ...teamData, roster: newRoster },
+            remarks,
+          };
+        });
       },
 
       applyCorrection: (homeScore, awayScore, homeLineup, awayLineup, servingTeam) => {

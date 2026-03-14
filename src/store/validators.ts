@@ -3,6 +3,15 @@ import { getSetEvents, getSubCount, getTimeoutCount, getCurrentRotation } from '
 import { findPlayerPosition, isBackRow } from '@/utils/rotation';
 
 /**
+ * Check if a team already has a delay warning in any set this match (USAV: per-match).
+ */
+export function hasDelayWarning(events: MatchEvent[], team: TeamSide): boolean {
+  return events.some(
+    (e) => e.type === 'sanction' && e.team === team && e.sanctionType === 'delay-warning'
+  );
+}
+
+/**
  * Check if a substitution is legal.
  * Returns null if legal, or an error string if not.
  */
@@ -109,6 +118,20 @@ export function validateLiberoReplacement(
     // The player at the position should be the one being replaced
     if (lineup[position] !== replacedPlayer) {
       return `Player #${replacedPlayer} is not at position ${position}`;
+    }
+
+    // USAV: Libero serving position lock-in — only one libero can serve, in one rotation
+    if (position === 1) {
+      const key = `${state.currentSetIndex}-${team}`;
+      const locked = state.liberoServingPositions[key];
+      if (locked) {
+        if (locked.liberoNumber !== liberoNumber) {
+          return `Libero #${locked.liberoNumber} is the designated server this set — #${liberoNumber} cannot serve`;
+        }
+        if (locked.replacedPlayer !== replacedPlayer) {
+          return `Libero #${liberoNumber} can only serve by replacing #${locked.replacedPlayer} (locked rotation)`;
+        }
+      }
     }
   } else {
     // Libero should be at the position

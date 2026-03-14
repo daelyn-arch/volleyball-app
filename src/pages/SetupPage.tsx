@@ -454,6 +454,6 @@ export default function SetupPage() {
     demoStore.setLineup(0, 'away', awayLineup);
     demoStore.setFirstServe(0, 'home');
 
-    navigate('/scoring');
+    navigate('/lineup/0');
   }
 }
