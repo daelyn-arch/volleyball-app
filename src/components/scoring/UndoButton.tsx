@@ -58,7 +58,8 @@ export default function UndoButton({ onUndo, disabled, lastEvent }: Props) {
       <button
         onClick={handleClick}
         disabled={disabled}
-        className="flex-1 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center"
+        className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
+        style={{ width: 60, height: 30 }}
       >
         Undo
       </button>

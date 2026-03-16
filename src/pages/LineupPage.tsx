@@ -34,9 +34,18 @@ function nextPosCCW(pos: CourtPosition): CourtPosition {
   return CCW_ORDER[(idx + 1) % CCW_ORDER.length];
 }
 
+function prevPosCCW(pos: CourtPosition): CourtPosition {
+  const idx = CCW_ORDER.indexOf(pos);
+  return CCW_ORDER[(idx - 1 + CCW_ORDER.length) % CCW_ORDER.length];
+}
+
+function cleanDigits(val: string): string {
+  return val.replace(/\D/g, '').replace(/^0+/, '').slice(0, 2);
+}
+
 function parseNumber(val: string): number | null {
   const n = parseInt(val.trim(), 10);
-  return !isNaN(n) && n > 0 ? n : null;
+  return !isNaN(n) && n >= 1 && n <= 99 ? n : null;
 }
 
 export default function LineupPage() {
@@ -79,6 +88,10 @@ export default function LineupPage() {
 
   // Refs for lineup grid inputs (keyed by `${team}-${pos}`)
   const gridInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Track last focused grid position per team
+  const lastFocusedPos = useRef<Record<string, CourtPosition>>({});
+  // Which team's grid is currently focused (null = none)
+  const [gridFocusedTeam, setGridFocusedTeam] = useState<'home' | 'away' | null>(null);
 
   // Touch drag state
   const [touchDrag, setTouchDrag] = useState<{ number: number; team: 'home' | 'away'; x: number; y: number } | null>(null);
@@ -134,7 +147,7 @@ export default function LineupPage() {
         const slotTeam = slotEl.dataset.slotTeam as 'home' | 'away';
         const slotPos = parseInt(slotEl.dataset.slot!, 10) as CourtPosition;
         if (slotTeam === touchDragRef.current.team) {
-          updateInput(slotTeam, slotPos, String(touchDragRef.current.number));
+          updateInput(slotTeam, slotPos, String(touchDragRef.current.number), true);
           triggerFlash(slotTeam, slotPos);
         }
       }
@@ -152,6 +165,7 @@ export default function LineupPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Adding mode state
+  const [activeSlotInput, setActiveSlotInput] = useState<string | null>(null); // tracks focused libero/captain inputs
   const [addingField, setAddingField] = useState<string | null>(null);
   const [addingInput, setAddingInput] = useState('');
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -230,11 +244,11 @@ export default function LineupPage() {
   const awayLiberoSet = useMemo(() => new Set(awayLiberoPlayers), [awayLiberoPlayers]);
 
   const visibleHomeBench = useMemo(
-    () => homeBenchPlayers.filter(n => !homeLineupNums.has(n) && !homeLiberoSet.has(n)),
+    () => homeBenchPlayers.filter(n => !homeLineupNums.has(n) && !homeLiberoSet.has(n)).sort((a, b) => a - b),
     [homeBenchPlayers, homeLineupNums, homeLiberoSet]
   );
   const visibleAwayBench = useMemo(
-    () => awayBenchPlayers.filter(n => !awayLineupNums.has(n) && !awayLiberoSet.has(n)),
+    () => awayBenchPlayers.filter(n => !awayLineupNums.has(n) && !awayLiberoSet.has(n)).sort((a, b) => a - b),
     [awayBenchPlayers, awayLineupNums, awayLiberoSet]
   );
 
@@ -259,14 +273,15 @@ export default function LineupPage() {
   function updateInput(
     team: 'home' | 'away',
     pos: CourtPosition,
-    value: string
+    value: string,
+    clearDuplicates = false
   ) {
-    const cleaned = value.replace(/\D/g, '');
+    const cleaned = cleanDigits(value);
     const setter = team === 'home' ? setHomeInputs : setAwayInputs;
     setter((prev) => {
       const updated = { ...prev, [pos]: cleaned };
-      // Clear any other position that has the same number
-      if (cleaned) {
+      // Only clear duplicates when the number is complete (2 digits, drag-drop, or advance)
+      if (clearDuplicates && cleaned) {
         for (const p of [1, 2, 3, 4, 5, 6] as CourtPosition[]) {
           if (p !== pos && updated[p] === cleaned) {
             updated[p] = '';
@@ -288,7 +303,7 @@ export default function LineupPage() {
 
   function handleSlotClick(team: 'home' | 'away', pos: CourtPosition) {
     if (selectedCard && selectedCard.team === team) {
-      updateInput(team, pos, String(selectedCard.number));
+      updateInput(team, pos, String(selectedCard.number), true);
       setSelectedCard(null);
       triggerFlash(team, pos);
     }
@@ -305,7 +320,7 @@ export default function LineupPage() {
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
       if (data.team === team && data.number) {
-        updateInput(team, pos, String(data.number));
+        updateInput(team, pos, String(data.number), true);
         triggerFlash(team, pos);
       }
     } catch { /* ignore invalid drops */ }
@@ -447,7 +462,7 @@ export default function LineupPage() {
         return;
       }
 
-      // Add any pending value and close
+      // Add pending value and close
       const num = parseNumber(addingInput);
       if (num) addToField(field, num);
       setAddingInput('');
@@ -528,7 +543,7 @@ export default function LineupPage() {
         onDragStart={isDraggable && !isSelected ? (e) => handleDragStart(e, num, team) : undefined}
         onClick={isDraggable && !touchDrag ? (e) => { e.stopPropagation(); handleCardTap(num, team); } : undefined}
         onTouchStart={isDraggable ? (e) => handleTouchStart(e, num, team) : undefined}
-        className={`flex items-center justify-center ${accentColor} rounded-lg transition-all select-none py-2.5 px-5 ${
+        className={`flex items-center justify-center ${accentColor} rounded-lg transition-all select-none py-2.5 ${
           isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
         } ${isSelected ? 'ring-2 ring-yellow-400 scale-105' : ''} ${isBeingDragged ? 'opacity-40' : ''}`}
       >
@@ -572,61 +587,60 @@ export default function LineupPage() {
           {label}
           {maxItems !== undefined && <span className="text-slate-500"> (max {maxItems})</span>}
         </label>
-        {/* Cards */}
-        {items.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {items.map(num => renderPlayerCard(num, accentColor, () => onRemove(num), team, isDraggable))}
-          </div>
-        )}
-        {/* Add button / input — hidden when at max */}
-        {!addHidden && (
-          addingField === field ? (
-            <div>
-              <input
-                ref={addInputRef}
-                type="text"
-                inputMode="numeric"
-                value={addingInput}
-                onChange={(e) => setAddingInput(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); confirmAdd(field); }
-                  if (e.key === 'Escape') cancelAdding();
-                }}
-                onBlur={() => handleBlur(field)}
-                placeholder="#"
-                className="w-full bg-slate-700 text-white text-lg font-bold rounded-lg px-3 py-3 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                maxLength={3}
-              />
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); addClickRef.current = true; }}
-                  onTouchStart={() => { addClickRef.current = true; }}
-                  onClick={() => { addClickRef.current = false; confirmAdd(field); }}
-                  className="flex-1 bg-green-600 active:bg-green-700 text-white py-12 rounded-lg font-bold text-base transition-colors touch-manipulation"
-                >
-                  Add #{addingInput || '…'}
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={() => { cancellingRef.current = true; }}
-                  onTouchStart={() => { cancellingRef.current = true; }}
-                  onClick={cancelAdding}
-                  className="bg-slate-600 active:bg-slate-500 text-white w-10 py-12 rounded-lg font-bold text-xl transition-colors touch-manipulation"
-                >
-                  ✓
-                </button>
-              </div>
-            </div>
-          ) : (
+        <div className="grid grid-cols-4 gap-2">
+          {items.map(num => renderPlayerCard(num, accentColor, () => onRemove(num), team, isDraggable))}
+          {/* Add slot — fills remaining columns in the row */}
+          {!addHidden && (
+            <input
+              style={{ gridColumn: addingField === field ? 'span 1' : `span ${4 - (items.length % 4) || 4}` }}
+              ref={addingField === field ? addInputRef : undefined}
+              type="text"
+              inputMode="numeric"
+              value={addingField === field ? addingInput : ''}
+              onChange={(e) => {
+                const val = cleanDigits(e.target.value);
+                setAddingInput(val);
+                if (val.length >= 2) {
+                  const num = parseNumber(val);
+                  if (num) { addToField(field, num); }
+                  setAddingInput('');
+                  setTimeout(() => addInputRef.current?.focus(), 10);
+                }
+              }}
+              onFocus={() => { if (addingField !== field) startAdding(field); setActiveSlotInput(null); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); confirmAdd(field); }
+                if (e.key === 'Escape') cancelAdding();
+              }}
+              onBlur={() => handleBlur(field)}
+              placeholder="+"
+              className="flex items-center justify-center bg-slate-700 text-white text-center text-2xl font-bold rounded-lg py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 border border-dashed border-slate-500"
+              maxLength={2}
+            />
+          )}
+        </div>
+        {/* Add / Done buttons — shown when input is active */}
+        {addingField === field && (
+          <div className="flex gap-2 mt-2">
             <button
               type="button"
-              onClick={() => startAdding(field)}
-              className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 rounded-lg text-sm font-semibold transition-colors border border-dashed border-slate-500"
+              onMouseDown={(e) => { e.preventDefault(); addClickRef.current = true; }}
+              onTouchStart={() => { addClickRef.current = true; }}
+              onClick={() => { addClickRef.current = false; confirmAdd(field); }}
+              className="flex-1 bg-green-600 active:bg-green-700 text-white py-12 rounded-lg font-bold text-base transition-colors touch-manipulation"
             >
-              + {buttonLabel}
+              Add #{addingInput || '…'}
             </button>
-          )
+            <button
+              type="button"
+              onMouseDown={() => { cancellingRef.current = true; }}
+              onTouchStart={() => { cancellingRef.current = true; }}
+              onClick={cancelAdding}
+              className="bg-slate-600 active:bg-slate-500 text-white w-10 py-12 rounded-lg font-bold text-xl transition-colors touch-manipulation"
+            >
+              ✓
+            </button>
+          </div>
         )}
       </div>
     );
@@ -639,81 +653,79 @@ export default function LineupPage() {
     const captainInLineup = team === 'home' ? homeCaptainInLineup : awayCaptainInLineup;
     const actingCaptain = team === 'home' ? homeActingCaptain : awayActingCaptain;
     const inputs = team === 'home' ? homeInputs : awayInputs;
-    const field = `${team}-captain`;
 
     return (
       <>
         <div className="mt-3">
           <label className="block text-xs text-slate-400 mb-1">Captain</label>
-          {/* Captain card */}
-          {captainNum !== null && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              <div
-                onClick={() => setCaptainTapped(prev => prev === team ? null : team)}
-                className={`flex items-center justify-center bg-yellow-700 rounded-lg py-2.5 px-5 transition-all ${captainTapped === team ? 'ring-2 ring-yellow-400 scale-105' : ''}`}
+          {captainNum !== null ? (
+            <div className="flex items-center justify-center bg-yellow-700 rounded-lg py-3 relative">
+              <span className="text-white font-bold text-2xl">#{captainNum}</span>
+              <button
+                type="button"
+                onClick={() => { setCaptain(null); setActing(''); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-red-300 active:text-red-400 font-bold text-lg leading-none"
               >
-                <span className="text-white font-bold text-2xl">#{captainNum}</span>
-                {captainTapped === team && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setCaptain(null); setActing(''); setCaptainTapped(null); }}
-                    className="ml-2 text-red-300 hover:text-red-400 font-bold text-lg leading-none"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
+                ×
+              </button>
             </div>
-          )}
-          {/* Add button / input */}
-          {captainNum === null && (
-            addingField === field ? (
-              <div>
-                <input
-                  ref={addInputRef}
-                  type="text"
-                  inputMode="numeric"
-                  value={addingInput}
-                  onChange={(e) => setAddingInput(e.target.value.replace(/\D/g, ''))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); confirmAdd(field); }
-                    if (e.key === 'Escape') cancelAdding();
-                  }}
-                  onBlur={() => handleBlur(field)}
-                  placeholder="#"
-                  className="w-full bg-slate-700 text-white text-lg font-bold rounded-lg px-3 py-3 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  maxLength={3}
-                />
+          ) : (
+            <>
+              <input
+                ref={(el) => { captainInputRefs.current[team] = el; }}
+                type="text"
+                inputMode="numeric"
+                placeholder="+ Captain"
+                maxLength={2}
+                className="w-full bg-slate-700 text-white text-center text-lg font-bold rounded-lg py-3 focus:outline-none focus:ring-2 focus:ring-yellow-500 placeholder-slate-500 border border-dashed border-slate-500"
+                onChange={(e) => {
+                  const cleaned = cleanDigits(e.target.value);
+                  if (cleaned.length >= 2) {
+                    const num = parseNumber(cleaned);
+                    if (num) { setCaptain(num); setActing(''); setActiveSlotInput(null); }
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => {
+                    const active = document.activeElement;
+                    const isSlotInput = Object.values(liberoInputRefs.current).some(el => el && el === active)
+                      || Object.values(captainInputRefs.current).some(el => el && el === active);
+                    if (!isSlotInput) setActiveSlotInput(null);
+                  }, 150);
+                }}
+                onFocus={(e) => { if (addingField) { setAddingField(null); setAddingInput(''); } setActiveSlotInput(`${team}-captain`); e.target.select(); }}
+              />
+              {activeSlotInput === `${team}-captain` && (
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"
-                    onMouseDown={(e) => { e.preventDefault(); addClickRef.current = true; }}
-                    onTouchStart={() => { addClickRef.current = true; }}
-                    onClick={() => { addClickRef.current = false; confirmAdd(field); }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onTouchStart={(e) => e.preventDefault()}
+                    onClick={() => {
+                      const val = captainInputRefs.current[team]?.value || '';
+                      const num = parseNumber(val);
+                      if (num) { setCaptain(num); setActing(''); setActiveSlotInput(null); }
+                    }}
                     className="flex-1 bg-green-600 active:bg-green-700 text-white py-12 rounded-lg font-bold text-base transition-colors touch-manipulation"
                   >
-                    Add #{addingInput || '…'}
+                    Add #{captainInputRefs.current[team]?.value || '…'}
                   </button>
                   <button
                     type="button"
-                    onMouseDown={() => { cancellingRef.current = true; }}
-                    onTouchStart={() => { cancellingRef.current = true; }}
-                    onClick={cancelAdding}
-                    className="bg-slate-600 active:bg-slate-500 text-white px-5 py-12 rounded-lg font-bold text-base transition-colors touch-manipulation"
+                    onClick={() => {
+                      const val = captainInputRefs.current[team]?.value || '';
+                      const num = parseNumber(val);
+                      if (num) { setCaptain(num); setActing(''); }
+                      captainInputRefs.current[team]?.blur();
+                      setActiveSlotInput(null);
+                    }}
+                    className="bg-slate-600 active:bg-slate-500 text-white w-10 py-12 rounded-lg font-bold text-xl transition-colors touch-manipulation"
                   >
-                    Done
+                    ✓
                   </button>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => startAdding(field)}
-                className="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 rounded-lg text-sm font-semibold transition-colors border border-dashed border-slate-500"
-              >
-                + Set Captain
-              </button>
-            )
+              )}
+            </>
           )}
         </div>
 
@@ -745,6 +757,178 @@ export default function LineupPage() {
           </div>
         )}
       </>
+    );
+  }
+
+  const lastNavTime = useRef(0);
+  /** Clear duplicates for the current position's value before navigating away */
+  function commitCurrentPos(team: TeamSide) {
+    const currentPos = lastFocusedPos.current[team];
+    if (!currentPos) return;
+    const inputs = team === 'home' ? homeInputs : awayInputs;
+    const val = inputs[currentPos];
+    if (val) {
+      updateInput(team, currentPos, val, true);
+    }
+  }
+
+  function advancePosition(team: TeamSide) {
+    const now = Date.now();
+    if (now - lastNavTime.current < 300) return;
+    lastNavTime.current = now;
+
+    commitCurrentPos(team);
+    const currentPos = lastFocusedPos.current[team];
+    if (currentPos) {
+      const next = nextPosCCW(currentPos);
+      const nextInput = gridInputRefs.current[`${team}-${next}`];
+      nextInput?.focus();
+      nextInput?.select();
+      lastFocusedPos.current[team] = next;
+    } else {
+      const firstInput = gridInputRefs.current[`${team}-1`];
+      firstInput?.focus();
+      firstInput?.select();
+      lastFocusedPos.current[team] = 1 as CourtPosition;
+    }
+  }
+
+  function retreatPosition(team: TeamSide) {
+    const now = Date.now();
+    if (now - lastNavTime.current < 300) return;
+    lastNavTime.current = now;
+
+    commitCurrentPos(team);
+    const currentPos = lastFocusedPos.current[team];
+    if (currentPos) {
+      const prev = prevPosCCW(currentPos);
+      const prevInput = gridInputRefs.current[`${team}-${prev}`];
+      prevInput?.focus();
+      prevInput?.select();
+      lastFocusedPos.current[team] = prev;
+    } else {
+      const firstInput = gridInputRefs.current[`${team}-1`];
+      firstInput?.focus();
+      firstInput?.select();
+      lastFocusedPos.current[team] = 1 as CourtPosition;
+    }
+  }
+
+  // Refs for libero slot inputs
+  const liberoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const captainInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  function renderLiberoSlots(team: TeamSide) {
+    const liberos = team === 'home' ? homeLiberoPlayers : awayLiberoPlayers;
+    const setLiberos = team === 'home' ? setHomeLiberoPlayers : setAwayLiberoPlayers;
+
+    function handleLiberoChange(slotIdx: number, value: string) {
+      const cleaned = cleanDigits(value);
+      // Only commit after 2 digits
+      if (cleaned.length >= 2) {
+        const num = parseNumber(cleaned);
+        if (num && !liberos.some((n, i) => i !== slotIdx && n === num)) {
+          // Focus next slot BEFORE state update so keyboard stays open on iOS
+          if (slotIdx === 0) {
+            liberoInputRefs.current[`${team}-1`]?.focus();
+            setActiveSlotInput(`${team}-libero-1`);
+          }
+          setLiberos(prev => {
+            const updated = [...prev];
+            updated[slotIdx] = num;
+            return updated;
+          });
+        }
+      }
+    }
+
+    function clearSlot(slotIdx: number) {
+      setLiberos(prev => prev.filter((_, i) => i !== slotIdx));
+    }
+
+    return (
+      <div className="mt-3">
+        <label className="block text-xs text-slate-400 mb-1">Libero(s)</label>
+        <div className="flex gap-2">
+          {[0, 1].map(slotIdx => {
+            const num = liberos[slotIdx];
+            const filled = num !== undefined;
+            return (
+              <div key={slotIdx} className="flex-1 relative">
+                {filled ? (
+                  <div className="flex items-center justify-center bg-teal-700 rounded-lg py-3 relative">
+                    <span className="text-white font-bold text-2xl">#{num}</span>
+                    <button
+                      type="button"
+                      onClick={() => clearSlot(slotIdx)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-red-300 active:text-red-400 font-bold text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    ref={(el) => { liberoInputRefs.current[`${team}-${slotIdx}`] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="+ Libero"
+                    maxLength={2}
+                    className="w-full bg-slate-700 text-white text-center text-lg font-bold rounded-lg py-3 focus:outline-none focus:ring-2 focus:ring-teal-500 placeholder-slate-500 border border-dashed border-slate-500"
+                    onChange={(e) => handleLiberoChange(slotIdx, e.target.value)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        // Don't clear if focus moved to another libero/captain slot input
+                        const active = document.activeElement;
+                        const isSlotInput = Object.values(liberoInputRefs.current).some(el => el && el === active)
+                          || Object.values(captainInputRefs.current).some(el => el && el === active);
+                        if (!isSlotInput) setActiveSlotInput(null);
+                      }, 150);
+                    }}
+                    onFocus={(e) => { if (addingField) { setAddingField(null); setAddingInput(''); } setActiveSlotInput(`${team}-libero-${slotIdx}`); e.target.select(); }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {/* Add / Done buttons for libero — shown when a libero input is focused */}
+        {(activeSlotInput === `${team}-libero-0` || activeSlotInput === `${team}-libero-1`) && (
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
+              onClick={() => {
+                const slotIdx = activeSlotInput === `${team}-libero-0` ? 0 : 1;
+                const val = liberoInputRefs.current[`${team}-${slotIdx}`]?.value || '';
+                const num = parseNumber(val);
+                if (num && !liberos.some((n, i) => i !== slotIdx && n === num)) {
+                  setLiberos(prev => { const updated = [...prev]; updated[slotIdx] = num; return updated; });
+                }
+              }}
+              className="flex-1 bg-green-600 active:bg-green-700 text-white py-12 rounded-lg font-bold text-base transition-colors touch-manipulation"
+            >
+              Add #{(() => { const si = activeSlotInput === `${team}-libero-0` ? 0 : 1; return liberoInputRefs.current[`${team}-${si}`]?.value || '…'; })()}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const slotIdx = activeSlotInput === `${team}-libero-0` ? 0 : 1;
+                const val = liberoInputRefs.current[`${team}-${slotIdx}`]?.value || '';
+                const num = parseNumber(val);
+                if (num && !liberos.some((n, i) => i !== slotIdx && n === num)) {
+                  setLiberos(prev => { const updated = [...prev]; updated[slotIdx] = num; return updated; });
+                }
+                liberoInputRefs.current[`${team}-${slotIdx}`]?.blur();
+                setActiveSlotInput(null);
+              }}
+              className="bg-slate-600 active:bg-slate-500 text-white w-10 py-12 rounded-lg font-bold text-xl transition-colors touch-manipulation"
+            >
+              ✓
+            </button>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -796,12 +980,16 @@ export default function LineupPage() {
                 inputMode="numeric"
                 value={inputs[g.pos]}
                 onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '');
-                  updateInput(team, g.pos, val);
-                  // Auto-advance to next position when a valid number is entered (1-3 digits)
-                  if (val && parseNumber(val)) {
+                  const val = cleanDigits(e.target.value);
+                  updateInput(team, g.pos, val, val.length >= 2);
+                  // Auto-advance to next position after 2 digits are entered
+                  if (val.length >= 2) {
                     const next = nextPosCCW(g.pos);
-                    setTimeout(() => gridInputRefs.current[`${team}-${next}`]?.focus(), 10);
+                    setTimeout(() => {
+                      const nextInput = gridInputRefs.current[`${team}-${next}`];
+                      nextInput?.focus();
+                      nextInput?.select();
+                    }, 10);
                   }
                 }}
                 onKeyDown={(e) => {
@@ -816,12 +1004,13 @@ export default function LineupPage() {
                     }
                   }
                 }}
-                onFocus={(e) => e.target.select()}
+                onFocus={(e) => { lastFocusedPos.current[team] = g.pos; setGridFocusedTeam(team); setActiveSlotInput(null); e.target.select(); }}
+                onBlur={() => { setTimeout(() => { const a = document.activeElement; const isGrid = Object.values(gridInputRefs.current).some(el => el && el === a); if (!isGrid) setGridFocusedTeam(null); }, 10); }}
                 placeholder="#"
                 className={`w-full bg-slate-700 text-white text-center text-2xl font-bold rounded-lg py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 transition-all ${
                   hasCardSelected ? 'ring-2 ring-yellow-400/50 ring-dashed' : ''
                 } ${flashSlot?.key === `${team}-${g.pos}` ? (flashSlot.team === 'home' ? 'animate-slot-pop-blue' : 'animate-slot-pop-red') : ''}`}
-                maxLength={3}
+                maxLength={2}
               />
               {g.pos === 1 && (
                 <span className="text-[10px] text-yellow-500 mt-0.5">Server</span>
@@ -829,6 +1018,32 @@ export default function LineupPage() {
             </div>
           ))}
         </div>
+
+        {/* Position nav buttons — only visible when a grid input for this team is focused */}
+        {gridFocusedTeam === team && (
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
+              onTouchEnd={() => retreatPosition(team)}
+              onClick={() => retreatPosition(team)}
+              className="flex-1 bg-slate-600 active:bg-slate-500 text-white text-lg font-bold py-12 rounded-lg transition-colors touch-manipulation"
+            >
+              ← Previous
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
+              onTouchEnd={() => advancePosition(team)}
+              onClick={() => advancePosition(team)}
+              className="flex-1 bg-green-600 active:bg-green-700 text-white text-lg font-bold py-12 rounded-lg transition-colors touch-manipulation"
+            >
+              Next →
+            </button>
+          </div>
+        )}
 
         {/* Bench players — visible = bench pool minus those in lineup or libero */}
         {renderAddSection(
@@ -842,17 +1057,8 @@ export default function LineupPage() {
           { draggable: true },
         )}
 
-        {/* Libero — max 2 */}
-        {renderAddSection(
-          `${team}-libero`,
-          'Libero(s)',
-          'Add Libero',
-          liberoPlayers,
-          (num) => setLiberos(prev => prev.filter(n => n !== num)),
-          'bg-teal-700',
-          team,
-          { maxItems: 2 },
-        )}
+        {/* Libero — 2 fixed slots */}
+        {renderLiberoSlots(team)}
 
         {/* Captain */}
         {renderCaptainSection(team)}

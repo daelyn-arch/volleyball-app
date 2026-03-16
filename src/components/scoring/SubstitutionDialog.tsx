@@ -19,7 +19,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
   const [playerOut, setPlayerOut] = useState<number | null>(preSelectedOut ?? null);
   const [playerIn, setPlayerIn] = useState<number | null>(null);
   const [playerInInput, setPlayerInInput] = useState('');
-  const [showAddPrompt, setShowAddPrompt] = useState<number | null>(null);
+  const [addingPlayerIn, setAddingPlayerIn] = useState(false);
   const [error, setError] = useState('');
 
   // Exceptional substitution state (injury bypass)
@@ -27,7 +27,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
   const [exceptionalOut, setExceptionalOut] = useState<number | null>(null);
   const [exceptionalIn, setExceptionalIn] = useState<number | null>(null);
   const [exceptionalInInput, setExceptionalInInput] = useState('');
-  const [showExceptionalAddPrompt, setShowExceptionalAddPrompt] = useState<number | null>(null);
+  const [addingExceptionalIn, setAddingExceptionalIn] = useState(false);
 
   const subCount = getSubCount(state.events, state.currentSetIndex, team);
   const maxSubs = state.config.maxSubsPerSet;
@@ -69,31 +69,21 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
 
   function handleExceptionalInInput(val: string) {
     setExceptionalInInput(val);
-    setShowExceptionalAddPrompt(null);
     const num = parseInt(val, 10);
-    if (isNaN(num) || val === '') {
+    if (isNaN(num) || val === '' || num < 1 || num > 99) {
       setExceptionalIn(null);
       return;
     }
-    if (exceptionalBench.includes(num)) {
-      setExceptionalIn(num);
-    } else if (num > 0) {
-      setExceptionalIn(null);
-      setShowExceptionalAddPrompt(num);
-    } else {
-      setExceptionalIn(null);
-    }
+    setExceptionalIn(num);
   }
 
-  function handleExceptionalAddPlayer(num: number) {
-    addPlayerToRoster(team, num);
-    setExceptionalIn(num);
-    setShowExceptionalAddPrompt(null);
-    setExceptionalInInput(String(num));
-  }
+  const exceptionalInNeedsAdd = exceptionalIn !== null && !teamData.roster.some(p => p.number === exceptionalIn);
 
   function handleExceptionalConfirm() {
     if (exceptionalOut === null || exceptionalIn === null) return;
+    if (exceptionalInNeedsAdd) {
+      addPlayerToRoster(team, exceptionalIn);
+    }
     recordExceptionalSubstitution(team, exceptionalIn, exceptionalOut);
     onClose();
   }
@@ -104,42 +94,31 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
       setPlayerIn(null);
       setPlayerInInput('');
     }
-    setShowAddPrompt(null);
     setError('');
   }
 
   function handlePlayerInInput(val: string) {
     setPlayerInInput(val);
-    setShowAddPrompt(null);
     const num = parseInt(val, 10);
-    if (isNaN(num) || val === '') {
+    if (isNaN(num) || val === '' || num < 1 || num > 99) {
       setPlayerIn(null);
       return;
     }
-    if (eligibleIn.includes(num)) {
-      setPlayerIn(num);
-      setError('');
-    } else if (playerOut !== null && num > 0) {
-      // Not on bench — prompt to add
-      setPlayerIn(null);
-      setShowAddPrompt(num);
-    } else {
-      setPlayerIn(null);
-    }
-  }
-
-  function handleAddNewPlayer(num: number) {
-    addPlayerToRoster(team, num);
     setPlayerIn(num);
-    setShowAddPrompt(null);
-    setPlayerInInput(String(num));
     setError('');
   }
+
+  // Whether the selected playerIn needs to be added to the roster first
+  const playerInNeedsAdd = playerIn !== null && !teamData.roster.some(p => p.number === playerIn);
 
   function handleConfirm() {
     if (playerOut === null || playerIn === null) {
       setError('Select both players');
       return;
+    }
+    // Auto-add to roster if new player
+    if (playerInNeedsAdd) {
+      addPlayerToRoster(team, playerIn);
     }
     const validationError = validateSubstitution(state, team, playerIn, playerOut);
     if (validationError) {
@@ -160,9 +139,14 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2">
       <div className={`bg-slate-800 rounded-2xl p-4 w-full max-w-md max-h-[70vh] overflow-y-auto border-2 ${borderColor}`}>
-        <h2 className={`text-2xl font-bold ${teamColor} mb-3`}>
-          {preSelectedOut != null ? <>Substitution: <span className="text-orange-400">#{preSelectedOut}</span> For</> : 'Substitution'}
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className={`text-2xl font-bold ${teamColor}`}>
+            {preSelectedOut != null ? <>Substitution: <span className="text-orange-400">#{preSelectedOut}</span> For</> : 'Substitution'}
+          </h2>
+          {!exceptionalMode && subsRemaining > 0 && (
+            <span className="text-slate-400 text-lg font-bold">{subsRemaining} left</span>
+          )}
+        </div>
 
         {exceptionalMode ? (
           <>
@@ -177,7 +161,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
                 {allCourtPlayers.map((num) => (
                   <button
                     key={num}
-                    onClick={() => { setExceptionalOut(num); setExceptionalIn(null); setExceptionalInInput(''); setShowExceptionalAddPrompt(null); }}
+                    onClick={() => { setExceptionalOut(num); setExceptionalIn(null); setExceptionalInInput(''); }}
                     className={`py-2 rounded-lg text-base font-bold transition-colors ${
                       exceptionalOut === num
                         ? 'bg-orange-600 text-white'
@@ -194,44 +178,44 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
             {exceptionalOut !== null && (
               <div className="mb-4">
                 <label className="block text-sm text-slate-400 mb-2">Replacement Player (IN)</label>
-                <div className="relative mb-2">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="Enter jersey #"
-                    value={exceptionalInInput}
-                    onChange={(e) => handleExceptionalInInput(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg bg-slate-700 text-white text-lg font-bold border-2 ${
-                      exceptionalIn !== null ? 'border-green-500' : 'border-slate-600'
-                    } focus:outline-none focus:border-green-400`}
-                  />
+                <div className="grid grid-cols-4 gap-2">
+                  {exceptionalBench.map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => { setExceptionalIn(num); setExceptionalInInput(String(num)); setAddingExceptionalIn(false); }}
+                      className={`py-2 rounded-lg text-base font-bold transition-colors ${
+                        exceptionalIn === num
+                          ? 'bg-green-600 text-white'
+                          : 'bg-slate-700 text-white hover:bg-slate-600'
+                      }`}
+                    >
+                      #{num}
+                    </button>
+                  ))}
+                  {addingExceptionalIn ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="#"
+                      value={exceptionalInInput}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 2);
+                        handleExceptionalInInput(val);
+                      }}
+                      onBlur={() => { setAddingExceptionalIn(false); }}
+                      className="py-2 rounded-lg text-base font-bold bg-slate-700 text-white text-center focus:outline-none focus:ring-2 focus:ring-green-500 border border-dashed border-slate-500"
+                      maxLength={2}
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setAddingExceptionalIn(true); setExceptionalInInput(''); }}
+                      className="py-2 rounded-lg text-base font-bold bg-slate-700 text-slate-400 hover:bg-slate-600 border border-dashed border-slate-500 transition-colors"
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
-                {showExceptionalAddPrompt !== null && (
-                  <div className="bg-amber-900/50 border border-amber-500 rounded-lg px-3 py-3 mb-2 flex items-center justify-between">
-                    <span className="text-amber-200 text-sm">#{showExceptionalAddPrompt} not on roster. Add?</span>
-                    <div className="flex gap-2 ml-3 shrink-0">
-                      <button onClick={() => handleExceptionalAddPlayer(showExceptionalAddPrompt)} className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded-lg font-semibold">Yes</button>
-                      <button onClick={() => { setShowExceptionalAddPrompt(null); setExceptionalInInput(''); }} className="bg-slate-600 hover:bg-slate-500 text-white text-sm px-3 py-1 rounded-lg font-semibold">No</button>
-                    </div>
-                  </div>
-                )}
-                {exceptionalBench.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {exceptionalBench.map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => { setExceptionalIn(num); setExceptionalInInput(String(num)); setShowExceptionalAddPrompt(null); }}
-                        className={`py-2 rounded-lg text-base font-bold transition-colors ${
-                          exceptionalIn === num
-                            ? 'bg-green-600 text-white'
-                            : 'bg-slate-700 text-white hover:bg-slate-600'
-                        }`}
-                      >
-                        #{num}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </>
@@ -292,63 +276,45 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
                 <div className="text-slate-500 text-sm py-2">Select a player to sub out first</div>
               ) : (
                 <>
-                  <div className="relative mb-2">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="Enter jersey #"
-                      value={playerInInput}
-                      onChange={(e) => handlePlayerInInput(e.target.value)}
-                      className={`w-full px-3 py-2 pr-24 rounded-lg bg-slate-700 text-white text-lg font-bold border-2 ${
-                        playerIn !== null ? 'border-green-500' : 'border-slate-600'
-                      } focus:outline-none focus:border-green-400`}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">{subsRemaining} left</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    {eligibleIn.map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => { setPlayerIn(num); setPlayerInInput(String(num)); setAddingPlayerIn(false); setError(''); }}
+                        className={`py-2 rounded-lg text-base font-bold transition-colors ${
+                          playerIn === num
+                            ? 'bg-green-600 text-white'
+                            : 'bg-slate-700 text-white hover:bg-slate-600'
+                        }`}
+                      >
+                        #{num}
+                      </button>
+                    ))}
+                    {/* Add new player card */}
+                    {addingPlayerIn ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="#"
+                        value={playerInInput}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 2);
+                          handlePlayerInInput(val);
+                        }}
+                        onBlur={() => { setAddingPlayerIn(false); }}
+                        className="py-2 rounded-lg text-base font-bold bg-slate-700 text-white text-center focus:outline-none focus:ring-2 focus:ring-green-500 border border-dashed border-slate-500"
+                        maxLength={2}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => { setAddingPlayerIn(true); setPlayerInInput(''); }}
+                        className="py-2 rounded-lg text-base font-bold bg-slate-700 text-slate-400 hover:bg-slate-600 border border-dashed border-slate-500 transition-colors"
+                      >
+                        +
+                      </button>
+                    )}
                   </div>
-
-                  {/* Add new player prompt */}
-                  {showAddPrompt !== null && (
-                    <div className="bg-amber-900/50 border border-amber-500 rounded-lg px-3 py-3 mb-2 flex items-center justify-between">
-                      <span className="text-amber-200 text-sm">
-                        #{showAddPrompt} is not on the roster. Add new player?
-                      </span>
-                      <div className="flex gap-2 ml-3 shrink-0">
-                        <button
-                          onClick={() => handleAddNewPlayer(showAddPrompt)}
-                          className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded-lg font-semibold"
-                        >
-                          Yes
-                        </button>
-                        <button
-                          onClick={() => { setShowAddPrompt(null); setPlayerInInput(''); }}
-                          className="bg-slate-600 hover:bg-slate-500 text-white text-sm px-3 py-1 rounded-lg font-semibold"
-                        >
-                          No
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {eligibleIn.length > 0 && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {eligibleIn.map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => { setPlayerIn(num); setPlayerInInput(String(num)); setShowAddPrompt(null); setError(''); }}
-                          className={`py-2 rounded-lg text-base font-bold transition-colors ${
-                            playerIn === num
-                              ? 'bg-green-600 text-white'
-                              : 'bg-slate-700 text-white hover:bg-slate-600'
-                          }`}
-                        >
-                          #{num}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {eligibleIn.length === 0 && showAddPrompt === null && (
-                    <div className="text-yellow-400 text-sm py-2">No eligible players to sub in for #{playerOut}. Type a jersey # to add a new player.</div>
-                  )}
                 </>
               )}
             </div>
@@ -374,7 +340,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
               disabled={exceptionalOut === null || exceptionalIn === null}
               className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-700 disabled:text-slate-500 text-white py-3 rounded-xl font-semibold transition-colors"
             >
-              Confirm Exceptional Sub
+              {exceptionalInNeedsAdd ? 'Add & Confirm' : 'Confirm'}
             </button>
           ) : subsRemaining > 0 && (
             <button
@@ -382,7 +348,7 @@ export default function SubstitutionDialog({ team, onClose, preSelectedOut }: Pr
               disabled={playerOut === null || playerIn === null}
               className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:text-slate-500 text-white py-3 rounded-xl font-semibold transition-colors"
             >
-              Confirm Sub
+              {playerInNeedsAdd ? 'Add & Confirm' : 'Confirm'}
             </button>
           )}
         </div>

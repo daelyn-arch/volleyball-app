@@ -4,6 +4,7 @@ import { useMatchStore } from '@/store/matchStore';
 import { useDialog } from '@/components/ThemedDialog';
 import { getSetScore, getSetsWon, getCurrentRotation, getSubCount, getTimeoutCount } from '@/store/derived';
 import { isSetComplete, getSetWinner } from '@/utils/scoring';
+import { validateSubstitution } from '@/store/validators';
 import SubstitutionDialog from '@/components/scoring/SubstitutionDialog';
 import TimeoutButton from '@/components/scoring/TimeoutButton';
 import UndoButton from '@/components/scoring/UndoButton';
@@ -11,7 +12,7 @@ import EventLog from '@/components/scoring/EventLog';
 import LiberoPanel from '@/components/scoring/LiberoPanel';
 import SanctionDialog from '@/components/scoring/SanctionDialog';
 import OverwriteDialog from '@/components/scoring/OverwriteDialog';
-import type { Lineup, TeamSide } from '@/types/match';
+import type { Lineup, TeamSide, CourtPosition } from '@/types/match';
 
 export default function ScoringPage() {
   const navigate = useNavigate();
@@ -28,6 +29,8 @@ export default function ScoringPage() {
     undo,
     advanceToNextSet,
     addRemark,
+    recordLiberoReplacement,
+    recordSubstitution,
   } = state;
 
   const { showConfirm } = useDialog();
@@ -74,6 +77,162 @@ export default function ScoringPage() {
   const homeServing = rotation?.servingTeam === 'home';
   const awayServing = rotation?.servingTeam === 'away';
 
+  // Detect if a libero should swap in for the server
+  const liberoSwapHint = (() => {
+    if (!rotation || setComplete) return null;
+    const servingTeam = rotation.servingTeam;
+    const lineup = servingTeam === 'home' ? rotation.homeLineup : rotation.awayLineup;
+    const serverNum = lineup[1]; // position I = server
+    const teamData = servingTeam === 'home' ? homeTeam : awayTeam;
+    const liberoNums = new Set(teamData.roster.filter(p => p.isLibero).map(p => p.number));
+
+    // If server is already a libero, no hint needed
+    if (liberoNums.has(serverNum)) return null;
+
+    // Check if there's a serving lock for this team
+    const key = `${currentSetIndex}-${servingTeam}`;
+    const lock = state.liberoServingPositions[key];
+    if (lock && lock.replacedPlayer === serverNum) {
+      // The player the libero previously served for is now at position 1
+      // Check that the libero is currently off court
+      const libOnCourt = Object.values(lineup).some(n => liberoNums.has(n));
+      if (!libOnCourt) {
+        return { team: servingTeam, liberoNumber: lock.liberoNumber, serverNumber: serverNum };
+      }
+    }
+    return null;
+  })();
+
+  // Detect recurring substitution patterns (e.g., 6-2 setter/opposite swap)
+  // Only considers subs made at rotation boundaries (before any rally points)
+  // Groups subs at the same boundary so paired subs (double-sub in 6-2) show together
+  const subPatternHints = (() => {
+    if (!rotation || setComplete) return [];
+    const hints: Array<{ team: TeamSide; playerOut: number; playerIn: number }> = [];
+    const seen = new Set<string>();
+
+    // Find the boundary ID (index of the sideout point) for a sub event
+    function getBoundaryId(subIdx: number, subSetIndex: number): number {
+      for (let i = subIdx - 1; i >= 0; i--) {
+        const e = events[i];
+        if (e.setIndex !== subSetIndex) continue;
+        if (e.type === 'point') {
+          return (e.scoringTeam !== e.servingTeam) ? i : -1;
+        }
+      }
+      return 0; // start of set
+    }
+
+    for (const team of ['home', 'away'] as TeamSide[]) {
+      const lineup = team === 'home' ? rotation.homeLineup : rotation.awayLineup;
+      const onCourt = new Set(Object.values(lineup));
+      const teamData = team === 'home' ? homeTeam : awayTeam;
+      const liberoNums = new Set(teamData.roster.filter(p => p.isLibero).map(p => p.number));
+
+      // Collect rotation-boundary subs grouped by boundary
+      const subsByBoundary = new Map<number, typeof events>();
+      for (let i = 0; i < events.length; i++) {
+        const e = events[i];
+        if (e.setIndex === currentSetIndex && e.type === 'substitution' && e.team === team) {
+          const boundaryId = getBoundaryId(i, currentSetIndex);
+          if (boundaryId >= 0) {
+            if (!subsByBoundary.has(boundaryId)) subsByBoundary.set(boundaryId, []);
+            subsByBoundary.get(boundaryId)!.push(e);
+          }
+        }
+      }
+
+      // Check if we're currently at a rotation boundary (no points since last sideout)
+      // This means a group sub was just performed and we're still in the same window
+      function isCurrentlyAtBoundary(): boolean {
+        for (let i = events.length - 1; i >= 0; i--) {
+          const e = events[i];
+          if (e.setIndex !== currentSetIndex) continue;
+          if (e.type === 'point') {
+            return e.scoringTeam !== e.servingTeam;
+          }
+        }
+        return true;
+      }
+      const atBoundaryNow = isCurrentlyAtBoundary();
+
+      // For each boundary group, check if ANY sub triggers → show ALL from that group
+      for (const [, groupSubs] of subsByBoundary) {
+        let groupTriggered = false;
+
+        // Check if any sub in this group has a trigger condition
+        for (const sub of groupSubs) {
+          if (sub.type !== 'substitution') continue;
+          // Trigger: playerIn at pos I OR playerOut at pos IV
+          if ((onCourt.has(sub.playerIn) && lineup[1] === sub.playerIn) ||
+              (onCourt.has(sub.playerOut) && lineup[4] === sub.playerOut)) {
+            groupTriggered = true;
+            break;
+          }
+        }
+
+        // Also trigger if a sub from this group was just performed (still at boundary)
+        if (!groupTriggered && atBoundaryNow) {
+          for (const sub of groupSubs) {
+            if (sub.type !== 'substitution') continue;
+            // Check if the reverse of this sub was just done (in recent events at this boundary)
+            for (let i = events.length - 1; i >= 0; i--) {
+              const e = events[i];
+              if (e.setIndex !== currentSetIndex) break;
+              if (e.type === 'point') break;
+              if (e.type === 'substitution' && e.team === team
+                && e.playerIn === sub.playerOut && e.playerOut === sub.playerIn) {
+                groupTriggered = true;
+                break;
+              }
+              if (e.type === 'substitution' && e.team === team
+                && e.playerIn === sub.playerIn && e.playerOut === sub.playerOut) {
+                groupTriggered = true;
+                break;
+              }
+            }
+            if (groupTriggered) break;
+          }
+        }
+
+        if (!groupTriggered) continue;
+
+        // Show all subs in this group that have valid conditions
+        for (const sub of groupSubs) {
+          if (sub.type !== 'substitution') continue;
+
+          // Case 1: playerIn is on court → suggest reverse
+          if (onCourt.has(sub.playerIn) && !liberoNums.has(sub.playerIn)) {
+            if (!onCourt.has(sub.playerOut) && !liberoNums.has(sub.playerOut)
+              && teamData.roster.some(p => p.number === sub.playerOut)
+              && validateSubstitution(state, team, sub.playerOut, sub.playerIn) === null) {
+              const key = `${team}-${sub.playerIn}-${sub.playerOut}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                hints.push({ team, playerOut: sub.playerIn, playerIn: sub.playerOut });
+              }
+            }
+          }
+
+          // Case 2: playerOut is on court → suggest same sub
+          if (onCourt.has(sub.playerOut) && !liberoNums.has(sub.playerOut)) {
+            if (!onCourt.has(sub.playerIn) && !liberoNums.has(sub.playerIn)
+              && teamData.roster.some(p => p.number === sub.playerIn)
+              && validateSubstitution(state, team, sub.playerIn, sub.playerOut) === null) {
+              const key = `${team}-${sub.playerOut}-${sub.playerIn}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                hints.push({ team, playerOut: sub.playerOut, playerIn: sub.playerIn });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return hints;
+  })();
+
   // Lock body scroll on this page only
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -99,6 +258,14 @@ export default function ScoringPage() {
           )}
         </div>
         <div className="flex gap-2">
+          <UndoButton onUndo={undo} disabled={events.length === 0} lastEvent={events[events.length - 1]} />
+          <button
+            onClick={() => setShowOverwriteDialog(true)}
+            className="bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
+            style={{ width: 60, height: 30 }}
+          >
+            Edit
+          </button>
           <button
             onClick={() => {
               const note = window.prompt('Add a note to the scoresheet remarks:');
@@ -111,13 +278,6 @@ export default function ScoringPage() {
             style={{ width: 60, height: 30 }}
           >
             Note
-          </button>
-          <button
-            onClick={() => setShowOverwriteDialog(true)}
-            className="bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold rounded-md transition-colors touch-manipulation"
-            style={{ width: 60, height: 30 }}
-          >
-            Edit
           </button>
           <button
             onClick={async () => {
@@ -182,44 +342,78 @@ export default function ScoringPage() {
         />
       </div>
 
+      {/* Status messages — between panels and event log */}
+      {setComplete && (
+        <div className="text-yellow-400 text-lg font-bold py-1 text-center">
+          {matchComplete
+            ? `Match Over! ${setWinner === 'home' ? homeTeam.name : awayTeam.name} wins ${setsWon.home}-${setsWon.away}`
+            : `Set ${currentSetIndex + 1} won by ${setWinner === 'home' ? homeTeam.name : awayTeam.name} (${score.home}-${score.away})`}
+        </div>
+      )}
+      {hasExpelled && !setComplete && (
+        <div className="text-red-400 text-sm font-bold py-1 text-center">
+          A player must be subbed in for {[...expelledHome, ...expelledAway].map(n => `#${n}`).join(', ')}
+        </div>
+      )}
+      {subHint > 0 && !setComplete && !hasExpelled && (
+        <div className="text-yellow-400 text-lg font-bold py-1 text-center">To make a Substitution select a Player Number</div>
+      )}
+      {liberoSwapHint && !hasExpelled && subHint === 0 && !setComplete && (
+        <div
+          onClick={() => {
+            recordLiberoReplacement(
+              liberoSwapHint.team,
+              liberoSwapHint.liberoNumber,
+              liberoSwapHint.serverNumber,
+              1 as CourtPosition,
+              true
+            );
+          }}
+          className="text-teal-400 text-lg font-bold py-1 text-center cursor-pointer hover:text-teal-300 touch-manipulation"
+        >
+          (Libero #{liberoSwapHint.liberoNumber} Swap for Server #{liberoSwapHint.serverNumber}?)
+        </div>
+      )}
+      {subPatternHints.length > 0 && !hasExpelled && subHint === 0 && !setComplete && (
+        <>
+          {subPatternHints.map((hint) => (
+            <div
+              key={`${hint.team}-${hint.playerOut}-${hint.playerIn}`}
+              onClick={() => {
+                recordSubstitution(hint.team, hint.playerIn, hint.playerOut);
+              }}
+              className={`${hint.team === 'home' ? 'text-blue-400 hover:text-blue-300' : 'text-red-400 hover:text-red-300'} text-lg font-bold py-1 text-center cursor-pointer touch-manipulation`}
+            >
+              (Sub #{hint.playerIn} for #{hint.playerOut}?)
+            </div>
+          ))}
+        </>
+      )}
+
       {/* Event Log */}
       <EventLog events={events} setIndex={currentSetIndex} homeTeam={homeTeam} awayTeam={awayTeam}
-        setCompleteMessage={setComplete ? (matchComplete
-          ? `Match Over! ${setWinner === 'home' ? homeTeam.name : awayTeam.name} wins ${setsWon.home}-${setsWon.away}`
-          : `Set ${currentSetIndex + 1} won by ${setWinner === 'home' ? homeTeam.name : awayTeam.name} (${score.home}-${score.away})`) : undefined}
         actions={
-          <>
-            <div className="flex gap-1.5 items-center w-full" style={{ marginTop: '-5px' }}>
-              <UndoButton onUndo={undo} disabled={events.length === 0} lastEvent={events[events.length - 1]} />
-              <button data-name="ref-btn" onClick={() => { setSubHint(0); setShowSanctionDialog(true); }} disabled={setComplete} className={`flex-1 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Ref</button>
-              {setComplete && !matchComplete ? (
-                <button
-                  data-name="next-set-btn"
-                  onClick={() => {
-                    advanceToNextSet();
-                    navigate(`/lineup/${currentSetIndex + 1}`);
-                  }}
-                  className="flex-[2] animate-gold-pulse text-white text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap"
-                >
-                  Start Set {currentSetIndex + 2}
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={() => setSubHint(n => n + 1)} className={`flex-1 bg-blue-700 text-orange-400 text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - homeSubCount}</span>)</button>
-                  <button type="button" onClick={() => setSubHint(n => n + 1)} className={`flex-1 bg-red-700 text-orange-400 text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - awaySubCount}</span>)</button>
-                </>
-              )}
-              <button data-name="scoresheet-btn" onClick={() => { setSubHint(0); navigate('/scoresheet'); }} className={`flex-1 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center ${setComplete ? 'animate-gold-pulse' : 'bg-slate-600 hover:bg-slate-500'}`}>Scoresheet</button>
-            </div>
-            {hasExpelled && !setComplete && (
-              <div className="text-red-400 text-xs mt-1 text-center font-bold">
-                A player must be subbed in for {[...expelledHome, ...expelledAway].map(n => `#${n}`).join(', ')}
-              </div>
+          <div className="flex gap-1.5 items-center w-full" style={{ marginTop: '-5px' }}>
+            <button data-name="ref-btn" onClick={() => { setSubHint(0); setShowSanctionDialog(true); }} disabled={setComplete} className={`flex-1 bg-yellow-700 hover:bg-yellow-600 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Ref</button>
+            {setComplete && !matchComplete ? (
+              <button
+                data-name="next-set-btn"
+                onClick={() => {
+                  advanceToNextSet();
+                  navigate(`/lineup/${currentSetIndex + 1}`);
+                }}
+                className="flex-[2] animate-gold-pulse text-white text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap"
+              >
+                Start Set {currentSetIndex + 2}
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => setSubHint(n => n + 1)} className={`flex-1 bg-blue-700 text-orange-400 text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - homeSubCount}</span>)</button>
+                <button type="button" onClick={() => setSubHint(n => n + 1)} className={`flex-1 bg-red-700 text-orange-400 text-xs font-bold px-2 py-1 rounded-lg text-center whitespace-nowrap ${setComplete ? 'opacity-40 pointer-events-none' : ''}`}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - awaySubCount}</span>)</button>
+              </>
             )}
-            {subHint > 0 && !setComplete && !hasExpelled && (
-              <div className="text-yellow-400 text-xs mt-1 text-center">To make a Substitution select a Player Number</div>
-            )}
-          </>
+            <button data-name="scoresheet-btn" onClick={() => { setSubHint(0); navigate('/scoresheet'); }} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold px-2 py-1 rounded-lg transition-colors text-center">Scoresheet</button>
+          </div>
         }
       />
 

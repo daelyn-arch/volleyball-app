@@ -564,11 +564,11 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
     if (meta.level) safeSetField(form, 'Level', meta.level);
     if (meta.poolPhase) safeSetField(form, 'Pool Phase', meta.poolPhase);
     if (meta.court) safeSetField(form, 'court', meta.court);
-    if (meta.division === 'Men') safeSetField(form, 'Men', 'X');
-    if (meta.division === 'Women') safeSetField(form, 'Women', 'X');
-    if (meta.division === 'CoEd') safeSetField(form, 'CoEd', 'X');
-    if (meta.category === 'Adult') safeSetField(form, 'Adult', 'X');
-    if (meta.category === 'Junior') safeSetField(form, 'Junior', 'X');
+    if (meta.division === 'Men') safeSetCheckbox(form, 'Men', true);
+    if (meta.division === 'Women') safeSetCheckbox(form, 'Women', true);
+    if (meta.division === 'CoEd') safeSetCheckbox(form, 'CoEd', true);
+    if (meta.category === 'Adult') safeSetCheckbox(form, 'Adult', true);
+    if (meta.category === 'Junior') safeSetCheckbox(form, 'Junior', true);
     if (meta.scorer) safeSetField(form, 'Match Scorer', meta.scorer);
     if (meta.referee) safeSetField(form, 'Match 1st Referee', meta.referee);
     if (meta.downRef) safeSetField(form, 'Down Ref', meta.downRef);
