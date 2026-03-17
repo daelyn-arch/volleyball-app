@@ -14,6 +14,7 @@ const path = require('path');
   const page = await browser.newPage();
 
   try {
+    page.on('console', msg => console.log('BROWSER:', msg.text()));
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
@@ -88,12 +89,17 @@ const path = require('path');
         'home','home','away','home','away','home','home','away', // 5-3
         'home','away','home','away','home','away','home',        // 10-6
         'away','home','away','home','away','home',               // 13-9
-        'away','home','home',                                     // 15-10
+        'away','home','home','home',                                // 15-10
       ];
       for (const team of set3Pattern) store.awardPoint(team);
 
+      const { getSetScore } = await import('/src/store/derived.ts');
+      const { getSetWinner } = await import('/src/utils/scoring.ts');
       const state = useMatchStore.getState();
-      console.log('Match complete:', state.matchComplete, 'Sets:', state.currentSetIndex + 1);
+      const s3score = getSetScore(state.events, 2);
+      const s3winner = getSetWinner(s3score, 2, state.config);
+      console.log('Match complete:', state.matchComplete, 'Current set:', state.currentSetIndex);
+      console.log('Set 3 score:', JSON.stringify(s3score), 'Winner:', s3winner);
       console.log('Set 3 switch score:', JSON.stringify(state.sets[2]?.sidesSwitchedAtScore));
 
       const blob = await fillScoresheet(state);

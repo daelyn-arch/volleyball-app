@@ -614,13 +614,8 @@ async function fillDecidingSetSheet(
   // ── Metadata ──
   drawAtField('Team Left', leftTeamData.name, 8, true);
   drawAtField('Team Right', rightTeamData.name, 8, true);
-
-  // "vs" header — draw team names directly near the static "vs" text
-  // Raw coords: x≈103 is the visual vertical center of the "vs" row, y values position left/right of "vs"
-  const vsX = 103;
-  const leftNameWidth = fontBold.widthOfTextAtSize(leftTeamData.name, 10);
-  page.drawText(leftTeamData.name, { x: vsX + 4, y: 370 - leftNameWidth, size: 10, font: fontBold, rotate: degrees(90), color: rgb(0, 0, 0) });
-  page.drawText(rightTeamData.name, { x: vsX + 4, y: 400, size: 10, font: fontBold, rotate: degrees(90), color: rgb(0, 0, 0) });
+  drawAtField('Team Left Header', leftTeamData.name, 10, true);
+  drawAtField('Team Right header', rightTeamData.name, 10, true);
   drawAtField('Date', new Date(state.createdAt).toLocaleDateString(), 8);
   drawAtField('Name of the Competition', state.metadata?.competition || '', 7);
   drawAtField('City, State', state.metadata?.cityState || '', 7);
@@ -663,6 +658,15 @@ async function fillDecidingSetSheet(
   if (switchScore) {
     fillLineup(leftTeam, 'Left', true);
     drawAtField('Team Left Post Swap', leftTeamData.name, 6);
+    // Post-swap captain
+    const leftCaptain = leftTeamData.roster.find(p => p.isCaptain);
+    if (leftCaptain) {
+      drawCentered('first_Left_CAPTAIN_x', 'X', 8);
+    }
+    const leftActingCaptain = leftTeamData.roster.find(p => p.isActingCaptain);
+    if (leftActingCaptain) {
+      drawCentered('first_Left_CAPTAIN_a', String(leftActingCaptain.number), 8);
+    }
   }
 
   // ── Serve / Receive ──
@@ -676,7 +680,9 @@ async function fillDecidingSetSheet(
   const leftLiberos = leftTeamData.roster.filter(p => p.isLibero);
   const rightLiberos = rightTeamData.roster.filter(p => p.isLibero);
   if (leftLiberos.length >= 1) drawCentered('left_libero_1', String(leftLiberos[0].number), 8);
+  if (leftLiberos.length >= 2) drawCentered('left_libero_2', String(leftLiberos[1].number), 8);
   if (rightLiberos.length >= 1) drawCentered('right_libero_1', String(rightLiberos[0].number), 8);
+  if (rightLiberos.length >= 2) drawCentered('right_libero_2', String(rightLiberos[1].number), 8);
 
   // ── Captain ──
   const fillCaptain = (teamData: typeof leftTeamData, prefix: string) => {
