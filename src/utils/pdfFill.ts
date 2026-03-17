@@ -614,6 +614,13 @@ async function fillDecidingSetSheet(
   // ── Metadata ──
   drawAtField('Team Left', leftTeamData.name, 8, true);
   drawAtField('Team Right', rightTeamData.name, 8, true);
+
+  // "vs" header — draw team names directly near the static "vs" text
+  // Raw coords: x≈103 is the visual vertical center of the "vs" row, y values position left/right of "vs"
+  const vsX = 103;
+  const leftNameWidth = fontBold.widthOfTextAtSize(leftTeamData.name, 10);
+  page.drawText(leftTeamData.name, { x: vsX + 4, y: 370 - leftNameWidth, size: 10, font: fontBold, rotate: degrees(90), color: rgb(0, 0, 0) });
+  page.drawText(rightTeamData.name, { x: vsX + 4, y: 400, size: 10, font: fontBold, rotate: degrees(90), color: rgb(0, 0, 0) });
   drawAtField('Date', new Date(state.createdAt).toLocaleDateString(), 8);
   drawAtField('Name of the Competition', state.metadata?.competition || '', 7);
   drawAtField('City, State', state.metadata?.cityState || '', 7);
@@ -848,14 +855,86 @@ async function fillDecidingSetSheet(
   drawAtField('Team_3', `${leftTeamData.name} vs ${rightTeamData.name}`, 5);
 
   // ── Resolve draw instructions and draw shapes ──
-  // pdf-lib uses raw coordinates on loaded pages, so pass field rects directly
+  // For 90° rotated page, slash direction must be flipped to appear correct after rotation
+  function drawSlashRotated(rect: { x: number; y: number; width: number; height: number }) {
+    const inset = 2;
+    page.drawLine({
+      start: { x: rect.x + inset, y: rect.y + rect.height - inset },
+      end: { x: rect.x + rect.width - inset, y: rect.y + inset },
+      thickness: 1.25,
+      color: rgb(0, 0, 0),
+    });
+  }
+
+  // Triangle for rotated page — rotate the apex direction
+  function drawTriangleRotated(rect: { x: number; y: number; width: number; height: number }) {
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const dim = Math.min(rect.width, rect.height);
+    const h = dim / 2;
+    const halfBase = h * 0.866;
+    // Rotate triangle 90° — apex points right in raw space (up visually after rotation)
+    const apex = { x: cx + h, y: cy };
+    const bl = { x: cx - h, y: cy - halfBase };
+    const br = { x: cx - h, y: cy + halfBase };
+    const color = rgb(0, 0, 0);
+    page.drawLine({ start: apex, end: bl, thickness: 0.75, color });
+    page.drawLine({ start: bl, end: br, thickness: 0.75, color });
+    page.drawLine({ start: br, end: apex, thickness: 0.75, color });
+  }
+
   for (const instr of drawInstructions) {
     if (!instr.fieldName) continue;
     const rect = getFieldRect(form, instr.fieldName);
     if (!rect) continue;
-    if (instr.shape === 'slash') drawSlashOnPage(page, rect);
-    else if (instr.shape === 'triangle') drawTriangleOnPage(page, rect);
-    else if (instr.shape === 'circle') drawCircleOnPage(page, rect);
+    if (instr.shape === 'slash') drawSlashRotated(rect);
+    else if (instr.shape === 'triangle') drawTriangleRotated(rect);
+    else if (instr.shape === 'circle') drawCircleOnPage(page, rect); // circles are rotation-invariant
+  }
+
+  // ── T-bars for unused score cells ──
+  const score3 = getSetScore(state.events, setIndex);
+  const winner3 = getSetWinner(score3, setIndex, state.config);
+  if (winner3) {
+    const drawTBar = (fieldPrefix: string, maxPoint: number, teamScoredUpTo: number) => {
+      for (let pt = teamScoredUpTo + 1; pt <= maxPoint; pt++) {
+        const fieldName = `${pt}_score_${fieldPrefix}`;
+        const rect = getFieldRect(form, fieldName);
+        if (!rect) continue;
+        // T-bar: horizontal line through middle + vertical line on left side (rotated for 90° page)
+        const cx = rect.x + rect.width / 2;
+        const cy = rect.y + rect.height / 2;
+        // Horizontal bar (visual, = vertical in raw due to rotation)
+        page.drawLine({
+          start: { x: rect.x + 1, y: cy },
+          end: { x: rect.x + rect.width - 1, y: cy },
+          thickness: 0.8, color: rgb(0, 0, 0),
+        });
+        // Vertical stem (visual, = horizontal in raw)
+        page.drawLine({
+          start: { x: cx, y: rect.y + 1 },
+          end: { x: cx, y: cy },
+          thickness: 0.8, color: rgb(0, 0, 0),
+        });
+      }
+    };
+
+    const leftFinalScore = leftTeam === 'home' ? score3.home : score3.away;
+    const rightFinalScore = rightTeam === 'home' ? score3.home : score3.away;
+    const higherScore = Math.max(leftFinalScore, rightFinalScore);
+
+    // Left pre-change: up to 13
+    if (leftSwitchPoint) {
+      drawTBar('left', Math.min(13, higherScore), Math.min(leftFinalScore, leftSwitchPoint));
+    } else {
+      drawTBar('left', Math.min(13, higherScore), leftFinalScore);
+    }
+    // Left post-change: up to higherScore
+    if (leftSwitchPoint && leftFinalScore > leftSwitchPoint) {
+      drawTBar('Left_post_change', higherScore, leftFinalScore);
+    }
+    // Right: up to higherScore
+    drawTBar('right', higherScore, rightFinalScore);
   }
 
   if (flatten) form.flatten();
