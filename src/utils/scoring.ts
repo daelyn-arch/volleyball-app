@@ -74,7 +74,7 @@ export function shouldSwitchSides(
   const isDecidingSet = setIndex === config.bestOf - 1;
   if (!isDecidingSet) return false;
   const switchPoint = Math.ceil(config.decidingSetPoints / 2);
-  return score.home + score.away === switchPoint;
+  return Math.max(score.home, score.away) >= switchPoint;
 }
 
 export const DEFAULT_CONFIG: MatchConfig = {

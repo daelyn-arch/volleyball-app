@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, PDFName, TextAlignment } from 'pdf-lib';
+import { PDFDocument, rgb, PDFName, TextAlignment, degrees, StandardFonts } from 'pdf-lib';
 import type { PDFPage } from 'pdf-lib';
 import type { MatchState, TeamSide, CourtPosition, PointEvent, MatchEvent, SetData, SanctionRecipient } from '@/types/match';
 import {
@@ -55,6 +55,13 @@ function getSidePrefix(side: 'left' | 'right'): SidePrefix {
 function safeSetField(form: any, name: string, value: string, alignment?: TextAlignment, fontSize?: number) {
   try {
     const field = form.getTextField(name);
+    // Remove maxLength constraint if it would block the value
+    try {
+      const maxLen = field.getMaxLength();
+      if (maxLen !== undefined && value.length > maxLen) {
+        field.setMaxLength(undefined as any);
+      }
+    } catch { /* no maxLength set */ }
     if (alignment !== undefined) {
       field.setAlignment(alignment);
     }
@@ -539,6 +546,322 @@ function fillTeamSetFields(
   }
 }
 
+// ── Deciding Set (3rd Set) PDF Fill ──────────────────────────
+
+async function fillDecidingSetSheet(
+  state: MatchState,
+  flatten: boolean,
+): Promise<PDFDocument> {
+  const pdfUrl = '/deciding_set_scoresheet_prepared_form.pdf';
+  const bytes = await fetch(pdfUrl).then(r => r.arrayBuffer());
+  const doc = await PDFDocument.load(bytes);
+  const form = doc.getForm();
+  const page = doc.getPages()[0];
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const setIndex = state.config.bestOf - 1;
+  const setData = state.sets[setIndex];
+  if (!setData) return doc;
+
+  const switchScore = setData.sidesSwitchedAtScore;
+  const homeSide = setData.homeBenchSide;
+  const leftTeam: TeamSide = homeSide === 'left' ? 'home' : 'away';
+  const rightTeam: TeamSide = homeSide === 'left' ? 'away' : 'home';
+  const leftTeamData = leftTeam === 'home' ? state.homeTeam : state.awayTeam;
+  const rightTeamData = rightTeam === 'home' ? state.homeTeam : state.awayTeam;
+
+  // Helper: draw text at a field's position on the 90°-rotated page
+  function drawAtField(fieldName: string, text: string, fontSize?: number, useBold?: boolean) {
+    try {
+      const f = form.getTextField(fieldName);
+      const rect = f.acroField.getWidgets()[0].getRectangle();
+      const sz = fontSize || 8;
+      const usedFont = useBold ? fontBold : font;
+      // For 90° rotated page: draw with rotate=90° at raw coords
+      page.drawText(text, {
+        x: rect.x + rect.width,
+        y: rect.y + 2,
+        size: sz,
+        font: usedFont,
+        rotate: degrees(90),
+        color: rgb(0, 0, 0),
+      });
+    } catch { /* field not found */ }
+  }
+
+  // Helper: draw centered text in a field
+  function drawCentered(fieldName: string, text: string, fontSize?: number) {
+    try {
+      const f = form.getTextField(fieldName);
+      const rect = f.acroField.getWidgets()[0].getRectangle();
+      const sz = fontSize || 8;
+      const textWidth = font.widthOfTextAtSize(text, sz);
+      // rect.height is visual width, rect.width is visual height (due to rotation)
+      const visualWidth = rect.height;
+      const offset = Math.max(0, (visualWidth - textWidth) / 2);
+      page.drawText(text, {
+        x: rect.x + rect.width,
+        y: rect.y + offset,
+        size: sz,
+        font,
+        rotate: degrees(90),
+        color: rgb(0, 0, 0),
+      });
+    } catch { /* field not found */ }
+  }
+
+  // ── Metadata ──
+  drawAtField('Team Left', leftTeamData.name, 8, true);
+  drawAtField('Team Right', rightTeamData.name, 8, true);
+  drawAtField('Date', new Date(state.createdAt).toLocaleDateString(), 8);
+  drawAtField('Name of the Competition', state.metadata?.competition || '', 7);
+  drawAtField('City, State', state.metadata?.cityState || '', 7);
+  drawAtField('Hall', state.metadata?.hall || '', 7);
+  drawAtField('Match No', state.metadata?.matchNumber || '', 8);
+  drawAtField('Level', state.metadata?.level || '', 8);
+  drawAtField('Pool Phase', state.metadata?.poolPhase || '', 7);
+  drawAtField('Court', state.metadata?.court || '', 8);
+  drawAtField('Match Scorer', state.metadata?.scorer || '', 6);
+  drawAtField('match scorer', state.metadata?.scorer || '', 6);
+  drawAtField('Match 1st Referee', state.metadata?.referee || '', 6);
+  drawAtField('1st', state.metadata?.referee || '', 6);
+  drawAtField('Down ref', state.metadata?.downRef || '', 6);
+
+  // Checkboxes still work fine via form
+  const meta = state.metadata;
+  if (meta) {
+    if (meta.division === 'Men') safeSetCheckbox(form, 'Men', true);
+    if (meta.division === 'Women') safeSetCheckbox(form, 'Women', true);
+    if (meta.division === 'CoEd') safeSetCheckbox(form, 'CoEd', true);
+    if (meta.category === 'Adult') safeSetCheckbox(form, 'Adult', true);
+    if (meta.category === 'Junior') safeSetCheckbox(form, 'Junior', true);
+  }
+
+  // Team A/B
+  drawCentered('A team a/b', leftTeam === 'home' ? 'A' : 'B', 8);
+  drawCentered('B team a/b', rightTeam === 'home' ? 'A' : 'B', 8);
+
+  // ── Lineup ──
+  const fillLineup = (team: TeamSide, prefix: string, postSwap: boolean) => {
+    const lineup = team === 'home' ? setData.homeLineup : setData.awayLineup;
+    if (!lineup) return;
+    const suffix = postSwap ? '_post_swap' : '';
+    for (let pos = 1; pos <= 6; pos++) {
+      drawCentered(`${prefix}_P${pos}${suffix}`, String(lineup[pos as CourtPosition]), 9);
+    }
+  };
+  fillLineup(leftTeam, 'Left', false);
+  fillLineup(rightTeam, 'Right', false);
+  if (switchScore) {
+    fillLineup(leftTeam, 'Left', true);
+    drawAtField('Team Left Post Swap', leftTeamData.name, 6);
+  }
+
+  // ── Serve / Receive ──
+  if (setData.firstServe) {
+    const leftServing = setData.firstServe === leftTeam;
+    drawCentered(leftServing ? 'Left_Serve' : 'Left_Recieve', 'X', 7);
+    drawCentered(leftServing ? 'Right_Recieve' : 'Right_Serve', 'X', 7);
+  }
+
+  // ── Libero ──
+  const leftLiberos = leftTeamData.roster.filter(p => p.isLibero);
+  const rightLiberos = rightTeamData.roster.filter(p => p.isLibero);
+  if (leftLiberos.length >= 1) drawCentered('left_libero_1', String(leftLiberos[0].number), 8);
+  if (rightLiberos.length >= 1) drawCentered('right_libero_1', String(rightLiberos[0].number), 8);
+
+  // ── Captain ──
+  const fillCaptain = (teamData: typeof leftTeamData, prefix: string) => {
+    const captain = teamData.roster.find(p => p.isCaptain);
+    const actingCaptain = teamData.roster.find(p => p.isActingCaptain);
+    if (captain) {
+      drawCentered(`${prefix}_CAPTAIN_x`, 'X', 8);
+      drawCentered(`${prefix}_CAPTAIN_c`, String(captain.number), 8);
+    }
+    if (actingCaptain) {
+      drawCentered(`${prefix}_CAPTAIN_a`, String(actingCaptain.number), 8);
+    }
+  };
+  fillCaptain(leftTeamData, 'Left');
+  fillCaptain(rightTeamData, 'Right');
+
+  // ── Running Score (graphical slashes) ──
+  const drawInstructions: DrawInstruction[] = [];
+  const runningScore = getRunningScoreData(state.events, setIndex);
+  const leftScore = leftTeam === 'home' ? runningScore.home : runningScore.away;
+  const rightScore = rightTeam === 'home' ? runningScore.home : runningScore.away;
+  const setEvents = state.events.filter(e => e.setIndex === setIndex);
+
+  const fillRunningScoreSide = (entries: typeof leftScore, team: TeamSide, fieldPrefix: string) => {
+    const teamData = team === 'home' ? state.homeTeam : state.awayTeam;
+    const libNums = new Set(teamData.roster.filter(p => p.isLibero).map(p => p.number));
+    const penaltyPoints = new Set<number>();
+    for (let i = 0; i < setEvents.length - 1; i++) {
+      const e = setEvents[i]; const next = setEvents[i + 1];
+      if (e.type === 'sanction' && next.type === 'point' &&
+          (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty' ||
+           e.sanctionType === 'expulsion' || e.sanctionType === 'disqualification') &&
+          next.scoringTeam === team) {
+        penaltyPoints.add(team === 'home' ? next.homeScore : next.awayScore);
+      }
+    }
+    const liberoServePoints = new Set<number>();
+    const pointEvents = setEvents.filter(e => e.type === 'point') as PointEvent[];
+    for (const pe of pointEvents) {
+      if (pe.scoringTeam === team && pe.servingTeam === team && libNums.has(pe.serverNumber)) {
+        liberoServePoints.add(team === 'home' ? pe.homeScore : pe.awayScore);
+      }
+    }
+    for (const entry of entries) {
+      if (entry.point < 1 || entry.point > 36) continue;
+      const fieldName = `${entry.point}_score_${fieldPrefix}`;
+      drawInstructions.push({ fieldName, shape: liberoServePoints.has(entry.point) ? 'triangle' : 'slash' });
+      if (penaltyPoints.has(entry.point)) drawInstructions.push({ fieldName, shape: 'circle' });
+    }
+  };
+
+  const leftSwitchPoint = switchScore ? (leftTeam === 'home' ? switchScore.home : switchScore.away) : null;
+  const leftPreChange = leftSwitchPoint ? leftScore.filter(e => e.point <= leftSwitchPoint) : leftScore;
+  const leftPostChange = leftSwitchPoint ? leftScore.filter(e => e.point > leftSwitchPoint) : [];
+  fillRunningScoreSide(leftPreChange, leftTeam, 'left');
+  for (const entry of leftPostChange) {
+    if (entry.point >= 1 && entry.point <= 36) drawInstructions.push({ fieldName: `${entry.point}_score_Left_post_change`, shape: 'slash' });
+  }
+  fillRunningScoreSide(rightScore, rightTeam, 'right');
+
+  if (switchScore) {
+    drawCentered('Left Points at Change', String(leftTeam === 'home' ? switchScore.home : switchScore.away), 8);
+    drawCentered('Left Team A or B', leftTeam === 'home' ? 'A' : 'B', 8);
+  }
+
+  // ── Service Rounds ──
+  const fillServiceRounds = (team: TeamSide, prefix: string) => {
+    const serviceRounds = getServiceRounds(state.events, setIndex, setData);
+    const teamRounds = team === 'home' ? serviceRounds.home : serviceRounds.away;
+    const isReceivingTeam = setData.firstServe !== team;
+    const srRowByCol: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    if (isReceivingTeam) { srRowByCol[1] = 1; drawCentered(`${prefix}_1_score_service_round_1`, 'X', 7); }
+    for (let i = 0; i < teamRounds.length; i++) {
+      const round = teamRounds[i];
+      const col = isReceivingTeam ? ((i + 1) % 6) + 1 : (i % 6) + 1;
+      srRowByCol[col]++;
+      const row = srRowByCol[col];
+      if (row > 6) continue;
+      if (round.endScore) {
+        const teamEndScore = team === 'home' ? round.endScore.home : round.endScore.away;
+        drawCentered(`${prefix}_${col}_score_service_round_${row}`, String(teamEndScore), 7);
+      }
+    }
+  };
+  fillServiceRounds(leftTeam, 'Left');
+  fillServiceRounds(rightTeam, 'Right');
+
+  // ── Substitutions ──
+  const fillSubs = (team: TeamSide, prefix: string) => {
+    const subs = getSubstitutions(state.events, setIndex, team);
+    const startLineup = team === 'home' ? setData.homeLineup : setData.awayLineup;
+    if (!startLineup) return;
+    const subCountByPos: Record<number, number> = {};
+    for (const sub of subs) {
+      let posCol = 0;
+      for (let p = 1; p <= 6; p++) {
+        if (startLineup[p as CourtPosition] === sub.playerOut || startLineup[p as CourtPosition] === sub.playerIn) { posCol = p; break; }
+      }
+      if (posCol === 0) posCol = 1;
+      const count = (subCountByPos[posCol] || 0) + 1;
+      subCountByPos[posCol] = count;
+      const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+      const ordinal = ordinals[count - 1] || `${count}th`;
+      drawCentered(`${prefix}_${posCol}_${ordinal}_sub`, String(sub.playerIn), 7);
+      drawCentered(`${prefix}_${posCol}_${ordinal}_sub_score`, `${sub.homeScore}:${sub.awayScore}`, 5);
+    }
+    for (let i = 1; i <= subs.length && i <= 12; i++) drawCentered(`${prefix}_sub_${i}`, 'X', 6);
+  };
+  fillSubs(leftTeam, 'Left');
+  fillSubs(rightTeam, 'Right');
+
+  // ── Timeouts ──
+  const fillTimeouts = (team: TeamSide, prefix: string) => {
+    const timeouts = getTimeouts(state.events, setIndex, team);
+    for (const to of timeouts) {
+      const isPostSwap = switchScore &&
+        (to.homeScore > switchScore.home || to.awayScore > switchScore.away ||
+         (to.homeScore === switchScore.home && to.awayScore === switchScore.away));
+      const suffix = isPostSwap ? '_post_swap' : '';
+      drawCentered(`timeout_${to.timeoutNumber}_${prefix.toLowerCase()}${suffix}`, `${to.homeScore}:${to.awayScore}`, 6);
+    }
+  };
+  fillTimeouts(leftTeam, 'Left');
+  fillTimeouts(rightTeam, 'Right');
+
+  // ── Sanctions (7 rows) ──
+  const sanctionEvents = state.events.filter((e): e is import('@/types/match').SanctionEvent => e.type === 'sanction');
+  const recipientSymbol: Record<string, string> = { player: '#', coach: 'C', asstCoach: 'A', trainer: 'T', manager: 'M' };
+  sanctionEvents.forEach((e, idx) => {
+    if (idx >= 7) return;
+    const row = idx + 1;
+    const isDelay = e.sanctionType === 'delay-warning' || e.sanctionType === 'delay-penalty';
+    const symbol = isDelay ? 'D' : (e.sanctionRecipient === 'player' && e.playerNumber ? String(e.playerNumber) : (e.sanctionRecipient ? recipientSymbol[e.sanctionRecipient] || '#' : '#'));
+    if (e.sanctionType === 'warning' || e.sanctionType === 'delay-warning') drawCentered(`yellow_card_${row}`, symbol, 7);
+    else if (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty') drawCentered(`red_card_${row}`, symbol, 7);
+    else if (e.sanctionType === 'expulsion') drawCentered(`Expulsion_${row}`, symbol, 7);
+    else if (e.sanctionType === 'disqualification') drawCentered(`Disqualified_${row}`, symbol, 7);
+    drawCentered(`penalized_team_${row}`, e.team === 'home' ? 'A' : 'B', 7);
+    drawCentered(`penalty_current_set_${row}`, String(e.setIndex + 1), 7);
+    drawCentered(`penalty_current_score_${row}`, `${e.homeScore}:${e.awayScore}`, 6);
+  });
+
+  // ── Set/Match Results ──
+  const score = getSetScore(state.events, setIndex);
+  const winner = getSetWinner(score, setIndex, state.config);
+  if (winner) {
+    drawAtField('Set 3 winner', winner === 'home' ? state.homeTeam.name : state.awayTeam.name, 7);
+    drawAtField('Set 3 Loser', winner === 'home' ? state.awayTeam.name : state.homeTeam.name, 7);
+    drawCentered('set 3 winner score', String(winner === 'home' ? score.home : score.away), 8);
+    drawCentered('set 3 loser score', String(winner === 'home' ? score.away : score.home), 8);
+  }
+  if (state.matchComplete) {
+    const setsWon = getSetsWon(state);
+    drawAtField('Match Winner', setsWon.home > setsWon.away ? state.homeTeam.name : state.awayTeam.name, 7);
+  }
+
+  // ── Remarks ──
+  const remarks: string[] = state.remarks ? [...state.remarks] : [];
+  if (remarks.length > 0) drawAtField('Remarks', remarks.join(' | '), 5);
+
+  // ── Set time ──
+  if (setData.startTime) {
+    const d = new Date(setData.startTime);
+    const hhmm = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    drawAtField('Time', hhmm, 8);
+    drawAtField('start time', hhmm, 7);
+    drawCentered('Set 3', hhmm, 7);
+  }
+  if (setData.endTime) {
+    const d = new Date(setData.endTime);
+    const hhmm = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    drawAtField('end time', hhmm, 7);
+  }
+
+  // ── Team_3 ──
+  drawAtField('Team_3', `${leftTeamData.name} vs ${rightTeamData.name}`, 5);
+
+  // ── Resolve draw instructions and draw shapes ──
+  // pdf-lib uses raw coordinates on loaded pages, so pass field rects directly
+  for (const instr of drawInstructions) {
+    if (!instr.fieldName) continue;
+    const rect = getFieldRect(form, instr.fieldName);
+    if (!rect) continue;
+    if (instr.shape === 'slash') drawSlashOnPage(page, rect);
+    else if (instr.shape === 'triangle') drawTriangleOnPage(page, rect);
+    else if (instr.shape === 'circle') drawCircleOnPage(page, rect);
+  }
+
+  if (flatten) form.flatten();
+  return doc;
+}
+
 // ── Main Export ──────────────────────────────────────────────
 
 export async function fillScoresheet(state: MatchState, { flatten = true }: { flatten?: boolean } = {}): Promise<Blob> {
@@ -563,7 +886,7 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
     if (meta.matchNumber) safeSetField(form, 'Match No', meta.matchNumber);
     if (meta.level) safeSetField(form, 'Level', meta.level);
     if (meta.poolPhase) safeSetField(form, 'Pool Phase', meta.poolPhase);
-    if (meta.court) safeSetField(form, 'court', meta.court);
+    if (meta.court) { safeSetField(form, 'court', meta.court); safeSetField(form, 'Court', meta.court); }
     if (meta.division === 'Men') safeSetCheckbox(form, 'Men', true);
     if (meta.division === 'Women') safeSetCheckbox(form, 'Women', true);
     if (meta.division === 'CoEd') safeSetCheckbox(form, 'CoEd', true);
@@ -786,6 +1109,19 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
   }
 
   if (flatten) form.flatten();
+
+  // ── Merge deciding set PDF if 3rd set exists ──
+  const decidingSetIndex = state.config.bestOf - 1;
+  const hasDecidingSet = state.events.some(e => e.setIndex === decidingSetIndex);
+
+  if (hasDecidingSet && decidingSetIndex >= 2) {
+    const decidingDoc = await fillDecidingSetSheet(state, flatten);
+    const decidingPages = await doc.copyPages(decidingDoc, decidingDoc.getPageIndices());
+    for (const page of decidingPages) {
+      doc.addPage(page);
+    }
+  }
+
   const pdfBytes = await doc.save();
   return new Blob([pdfBytes], { type: 'application/pdf' });
 }

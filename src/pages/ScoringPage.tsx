@@ -22,6 +22,7 @@ export default function ScoringPage() {
     awayTeam,
     config,
     events,
+    sets,
     currentSetIndex,
     matchComplete,
     awardPoint,
@@ -45,6 +46,10 @@ export default function ScoringPage() {
   const rotation = getCurrentRotation(state, currentSetIndex);
   const setComplete = isSetComplete(score, currentSetIndex, config);
   const setWinner = getSetWinner(score, currentSetIndex, config);
+
+  // Deciding set side switch notification
+  const switchScore = sets[currentSetIndex]?.sidesSwitchedAtScore;
+  const justSwitched = switchScore && score.home === switchScore.home && score.away === switchScore.away && !setComplete;
 
   const homeSubCount = getSubCount(events, currentSetIndex, 'home');
   const awaySubCount = getSubCount(events, currentSetIndex, 'away');
@@ -343,6 +348,11 @@ export default function ScoringPage() {
       </div>
 
       {/* Status messages — between panels and event log */}
+      {justSwitched && (
+        <div className="text-amber-400 text-lg font-bold py-1 text-center animate-pulse">
+          Switch Sides! ({score.home}-{score.away})
+        </div>
+      )}
       {setComplete && (
         <div className="text-yellow-400 text-lg font-bold py-1 text-center">
           {matchComplete

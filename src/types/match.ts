@@ -107,6 +107,8 @@ export interface SetData {
   homeBenchSide: 'left' | 'right';
   startTime: number | null;
   endTime: number | null;
+  /** Score at the moment of the 8-point side switch in deciding set (null if not happened) */
+  sidesSwitchedAtScore: { home: number; away: number } | null;
 }
 
 // ── Match Metadata (optional, for PDF) ───────────────────

@@ -49,6 +49,7 @@ function createEmptySetData(): SetData {
     homeBenchSide: 'left',
     startTime: null,
     endTime: null,
+    sidesSwitchedAtScore: null,
   };
 }
 
@@ -306,6 +307,17 @@ export const useMatchStore = create<MatchStore>()(
         if (setWinner) {
           sets[setIndex] = { ...(setsUpdated ? sets[setIndex] : setData), endTime: Date.now() };
           setsUpdated = true;
+        }
+
+        // Deciding set side switch at 8 points
+        const isDecidingSet = setIndex === state.config.bestOf - 1;
+        const currentSetData = setsUpdated ? sets[setIndex] : setData;
+        if (isDecidingSet && !currentSetData.sidesSwitchedAtScore) {
+          const switchPoint = Math.ceil(state.config.decidingSetPoints / 2); // 8 for 15-point set
+          if (Math.max(newHomeScore, newAwayScore) >= switchPoint) {
+            sets[setIndex] = { ...currentSetData, sidesSwitchedAtScore: { home: newHomeScore, away: newAwayScore } };
+            setsUpdated = true;
+          }
         }
 
         set({
