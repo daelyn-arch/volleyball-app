@@ -911,7 +911,30 @@ async function fillDecidingSetSheet(
       if (r.includes('Set 3')) decidingRemarks.push(r);
     }
   }
-  if (decidingRemarks.length > 0) drawAtField('Remarks', decidingRemarks.join('\n'), 6);
+  if (decidingRemarks.length > 0) {
+    try {
+      const f = form.getTextField('Remarks');
+      const rect = f.acroField.getWidgets()[0].getRectangle();
+      // On rotated page: rect.x = visual bottom, rect.x + rect.width = visual top
+      // rect.y = visual left edge, rect.height = visual width
+      const fontSize = 6;
+      const lineHeight = fontSize * 1.5;
+      // Start at visual top-left: high raw X, low raw Y
+      let xPos = rect.x + rect.width - fontSize - 2; // visual top
+      for (const line of decidingRemarks) {
+        page.drawText(line, {
+          x: xPos,
+          y: rect.y + 2, // visual left edge
+          size: fontSize,
+          font,
+          rotate: degrees(90),
+          color: rgb(0, 0, 0),
+        });
+        xPos -= lineHeight; // move down (decreasing raw X)
+        if (xPos < rect.x + 2) break; // stop if we reach the bottom
+      }
+    } catch { /* field not found */ }
+  }
 
   // ── Set time ──
   if (setData.startTime) {
