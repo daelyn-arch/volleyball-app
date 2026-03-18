@@ -952,42 +952,46 @@ async function fillDecidingSetSheet(
   const score3 = getSetScore(state.events, setIndex);
   const winner3 = getSetWinner(score3, setIndex, state.config);
   if (winner3) {
+    // On 90° rotated page: visual columns run along raw X axis
+    // Visual down = increasing raw X, Visual right = increasing raw Y
+    // The T-bar goes DOWN a column from the first unused cell to the end of the column block (12, 24, or 36)
     const drawTBarRange = (fieldPrefix: string, startPoint: number, endPoint: number) => {
       if (startPoint > endPoint) return;
 
-      // Group cells by row (cells in the same row have similar raw x values)
-      const rows: Array<Array<{ pt: number; rect: { x: number; y: number; width: number; height: number } }>> = [];
-      let currentRow: typeof rows[0] = [];
+      // For each unused cell, find which column block it's in and draw T down to end of block
+      // Column blocks: 1-12, 13-24, 25-36 (each block = one visual column of 12 cells)
+      const processed = new Set<number>();
 
       for (let pt = startPoint; pt <= endPoint; pt++) {
-        const rect = getFieldRect(form, `${pt}_score_${fieldPrefix}`);
-        if (!rect) continue;
-        // If this cell's raw x is significantly different from the previous, it's a new row
-        if (currentRow.length > 0 && Math.abs(rect.x - currentRow[0].rect.x) > 5) {
-          rows.push(currentRow);
-          currentRow = [];
-        }
-        currentRow.push({ pt, rect });
-      }
-      if (currentRow.length > 0) rows.push(currentRow);
+        const blockEnd = Math.ceil(pt / 12) * 12; // 12, 24, or 36
+        const blockStart = blockEnd - 11; // 1, 13, or 25
 
-      // Draw T-bar for each row
-      for (const row of rows) {
-        if (row.length === 0) continue;
-        const first = row[0].rect;
-        const last = row[row.length - 1].rect;
-        const cx = first.x + first.width / 2;
+        // Only process each column block once
+        if (processed.has(blockStart)) continue;
+        processed.add(blockStart);
 
-        // Horizontal bar (visual) = line along raw y across all cells in this row
+        // Find first unused cell in this block
+        const firstUnused = Math.max(startPoint, blockStart);
+        const lastInBlock = Math.min(endPoint, blockEnd);
+
+        const firstRect = getFieldRect(form, `${firstUnused}_score_${fieldPrefix}`);
+        const lastRect = getFieldRect(form, `${lastInBlock}_score_${fieldPrefix}`);
+        if (!firstRect || !lastRect) continue;
+
+        const cy = firstRect.y + firstRect.height / 2; // visual horizontal center
+
+        // Horizontal cap at top of first unused cell (visual) = line along raw Y at raw X of cell top
         page.drawLine({
-          start: { x: cx, y: Math.min(first.y, last.y) },
-          end: { x: cx, y: Math.max(first.y + first.height, last.y + last.height) },
+          start: { x: firstRect.x, y: firstRect.y + 1 },
+          end: { x: firstRect.x, y: firstRect.y + firstRect.height - 1 },
           thickness: 0.8, color: rgb(0, 0, 0),
         });
-        // Vertical stem (visual) at the start cell
+
+        // Vertical line going DOWN (visual) = line along raw X from first to last cell
+        // Increasing raw X = visual down
         page.drawLine({
-          start: { x: first.x + 1, y: first.y + first.height / 2 },
-          end: { x: cx, y: first.y + first.height / 2 },
+          start: { x: firstRect.x, y: cy },
+          end: { x: lastRect.x + lastRect.width, y: cy },
           thickness: 0.8, color: rgb(0, 0, 0),
         });
       }
