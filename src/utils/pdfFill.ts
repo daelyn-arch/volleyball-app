@@ -888,9 +888,30 @@ async function fillDecidingSetSheet(
     drawAtField('Match Winner', setsWon.home > setsWon.away ? state.homeTeam.name : state.awayTeam.name, 10, true);
   }
 
-  // ── Remarks ──
-  const remarks: string[] = state.remarks ? [...state.remarks] : [];
-  if (remarks.length > 0) drawAtField('Remarks', remarks.join(' | '), 5);
+  // ── Remarks (only set 3 sanctions) ──
+  const decidingRemarks: string[] = [];
+  const sanctionLabels3: Record<string, string> = {
+    'warning': 'Warning', 'penalty': 'Penalty',
+    'delay-warning': 'Delay Warning', 'delay-penalty': 'Delay Penalty',
+    'expulsion': 'Expulsion', 'disqualification': 'Disqualification',
+  };
+  const recipientLabels3: Record<string, string> = {
+    player: 'Player', coach: 'Coach', asstCoach: 'Asst Coach', trainer: 'Trainer', manager: 'Manager',
+  };
+  sanctionEvents.filter(e => e.setIndex === setIndex).forEach((e) => {
+    const teamName = e.team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+    const label = sanctionLabels3[e.sanctionType] || e.sanctionType;
+    const recipient = e.sanctionRecipient ? recipientLabels3[e.sanctionRecipient] || '' : '';
+    const playerStr = e.playerNumber ? ` #${e.playerNumber}` : '';
+    decidingRemarks.push(`Set 3 (${e.homeScore}:${e.awayScore}): ${label} - ${teamName}${recipient ? ' ' + recipient : ''}${playerStr}`);
+  });
+  // Also include user remarks that mention set 3
+  if (state.remarks) {
+    for (const r of state.remarks) {
+      if (r.includes('Set 3')) decidingRemarks.push(r);
+    }
+  }
+  if (decidingRemarks.length > 0) drawAtField('Remarks', decidingRemarks.join('\n'), 6);
 
   // ── Set time ──
   if (setData.startTime) {
@@ -1055,6 +1076,12 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
     if (meta.downRef) safeSetField(form, 'Down Ref', meta.downRef);
   }
 
+  // ── Match Time (set 1 start time) ──
+  if (state.sets[0]?.startTime) {
+    const d = new Date(state.sets[0].startTime);
+    safeSetField(form, 'time', d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0'));
+  }
+
   // ── Set Times (military/24h format) ──
   for (let si = 0; si < 2 && si <= state.currentSetIndex; si++) {
     const sd = state.sets[si];
@@ -1163,7 +1190,10 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
   const recipientLabels: Record<string, string> = {
     player: 'Player', coach: 'Coach', asstCoach: 'Asst Coach', trainer: 'Trainer', manager: 'Manager',
   };
+  const decidingSetIndex = state.config.bestOf - 1;
   sanctionEvents.forEach((e) => {
+    // Skip set 3 sanctions — they go in the deciding set PDF remarks
+    if (e.setIndex === decidingSetIndex && decidingSetIndex >= 2) return;
     const teamName = e.team === 'home' ? state.homeTeam.name : state.awayTeam.name;
     const label = sanctionLabels[e.sanctionType] || e.sanctionType;
     const recipient = e.sanctionRecipient ? recipientLabels[e.sanctionRecipient] || '' : '';
@@ -1269,7 +1299,6 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
   if (flatten) form.flatten();
 
   // ── Merge deciding set PDF if 3rd set exists ──
-  const decidingSetIndex = state.config.bestOf - 1;
   const hasDecidingSet = state.events.some(e => e.setIndex === decidingSetIndex);
 
   if (hasDecidingSet && decidingSetIndex >= 2) {
