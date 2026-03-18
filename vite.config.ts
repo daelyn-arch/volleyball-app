@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Volleyball Scorekeeper',
-        short_name: 'VBScore',
+        name: 'ScoreDash',
+        short_name: 'ScoreDash',
         description: 'USAV volleyball scorekeeping app',
         theme_color: '#0f172a',
         background_color: '#0f172a',

@@ -22,13 +22,22 @@ export default function HomePage() {
   const matchComplete = useMatchStore((s) => s.matchComplete);
   const homeTeam = useMatchStore((s) => s.homeTeam);
   const awayTeam = useMatchStore((s) => s.awayTeam);
+  const sets = useMatchStore((s) => s.sets);
   const syncedAt = useMatchStore((s) => s.syncedAt);
   const triggerSync = useMatchStore((s) => s.triggerSync);
   const resetMatch = useMatchStore((s) => s.resetMatch);
 
   const [syncing, setSyncing] = useState(false);
 
-  const hasActiveMatch = matchId && !matchComplete;
+  // If a match was created but lineups were never set, discard it
+  const firstSetHasLineups = sets[0]?.homeLineup && sets[0]?.awayLineup;
+  useEffect(() => {
+    if (matchId && !firstSetHasLineups) {
+      resetMatch();
+    }
+  }, [matchId, firstSetHasLineups, resetMatch]);
+
+  const hasActiveMatch = matchId && !matchComplete && firstSetHasLineups;
   const hasCompletedMatch = matchId && matchComplete;
 
   const handleSync = async () => {

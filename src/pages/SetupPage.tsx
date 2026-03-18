@@ -3,6 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
 import type { Team, MatchMetadata, Lineup, TeamSide } from '@/types/match';
 
+const USAV_REGIONS = [
+  { code: 'AH', name: 'Aloha' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
+  { code: 'BG', name: 'Badger' }, { code: 'BY', name: 'Bayou' }, { code: 'CE', name: 'Columbia Empire' },
+  { code: 'CH', name: 'Chesapeake' }, { code: 'CR', name: 'Carolina' }, { code: 'DE', name: 'Delta' },
+  { code: 'EV', name: 'Evergreen' }, { code: 'FL', name: 'Florida' }, { code: 'GC', name: 'Gulf Coast' },
+  { code: 'GE', name: 'Grand East' }, { code: 'GL', name: 'Great Lakes' }, { code: 'GP', name: 'Great Plains' },
+  { code: 'GW', name: 'Gateway' }, { code: 'HA', name: 'Heart of America' }, { code: 'HO', name: 'Hoosier' },
+  { code: 'IA', name: 'Iowa' }, { code: 'IM', name: 'Intermountain' }, { code: 'KE', name: 'Keystone' },
+  { code: 'LK', name: 'Lakeshore' }, { code: 'LS', name: 'Lone Star' }, { code: 'MK', name: 'Moku O Keawe' },
+  { code: 'NC', name: 'Northern California' }, { code: 'NE', name: 'New England' }, { code: 'NO', name: 'North Country' },
+  { code: 'NT', name: 'North Texas' }, { code: 'OD', name: 'Old Dominion' }, { code: 'OK', name: 'Oklahoma' },
+  { code: 'OV', name: 'Ohio Valley' }, { code: 'PM', name: 'Palmetto' }, { code: 'PR', name: 'Pioneer' },
+  { code: 'PS', name: 'Puget Sound' }, { code: 'RM', name: 'Rocky Mountain' }, { code: 'SC', name: 'Southern California' },
+  { code: 'SO', name: 'Southern' }, { code: 'SU', name: 'Sun Country' }, { code: 'WE', name: 'Western Empire' },
+  { code: 'XL', name: 'Excel' },
+];
+
 export default function SetupPage() {
   const navigate = useNavigate();
   const createMatch = useMatchStore((s) => s.createMatch);
@@ -10,6 +27,7 @@ export default function SetupPage() {
   const [homeName, setHomeName] = useState('');
   const [awayName, setAwayName] = useState('');
   const [bestOf, setBestOf] = useState<3 | 5>(3);
+  const [devTaps, setDevTaps] = useState(0);
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
 
@@ -25,6 +43,10 @@ export default function SetupPage() {
   const [scorer, setScorer] = useState('');
   const [referee, setReferee] = useState('');
   const [downRef, setDownRef] = useState('');
+  const [workTeam, setWorkTeam] = useState('');
+  const [region, setRegion] = useState('');
+  const [regionSearch, setRegionSearch] = useState('');
+  const [regionOpen, setRegionOpen] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,11 +73,13 @@ export default function SetupPage() {
       scorer: scorer.trim(),
       referee: referee.trim(),
       downRef: downRef.trim(),
+      workTeam: workTeam.trim(),
+      region,
     });
     navigate('/lineup/0');
   }
 
-  const inputClass = 'w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const inputClass = 'w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-[17px] focus:outline-none focus:ring-2 focus:ring-blue-500';
 
   return (
     <div className="min-h-full p-6 max-w-2xl mx-auto">
@@ -67,7 +91,7 @@ export default function SetupPage() {
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => setBestOf(3)}
+              onClick={() => { setBestOf(3); setDevTaps(n => n + 1); }}
               className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
                 bestOf === 3
                   ? 'bg-blue-600 text-white'
@@ -78,7 +102,7 @@ export default function SetupPage() {
             </button>
             <button
               type="button"
-              onClick={() => setBestOf(5)}
+              onClick={() => { setBestOf(5); setDevTaps(0); }}
               className={`flex-1 py-3 rounded-lg font-semibold text-lg transition-colors ${
                 bestOf === 5
                   ? 'bg-blue-600 text-white'
@@ -122,49 +146,49 @@ export default function SetupPage() {
             onClick={() => setShowDetails(!showDetails)}
             className="w-full flex items-center justify-between px-4 py-3 text-slate-300 hover:text-white transition-colors"
           >
-            <span className="text-sm font-medium">Match Details (optional)</span>
+            <span className="text-[17px] font-medium">Match Details (optional)</span>
             <span className="text-lg">{showDetails ? '\u25B2' : '\u25BC'}</span>
           </button>
 
           {showDetails && (
             <div className="px-4 pb-4 grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="block text-xs text-slate-400 mb-1">Competition</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Competition</label>
                 <input type="text" placeholder="Name of the Competition" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">City, State</label>
+                <label className="block text-[15px] text-slate-400 mb-1">City, State</label>
                 <input type="text" placeholder="City, State" value={cityState} onChange={(e) => setCityState(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Hall</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Hall</label>
                 <input type="text" placeholder="Hall / Venue" value={hall} onChange={(e) => setHall(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Match #</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Match #</label>
                 <input type="text" placeholder="Match Number" value={matchNumber} onChange={(e) => setMatchNumber(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Court</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Court</label>
                 <input type="text" placeholder="Court" value={court} onChange={(e) => setCourt(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Level</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Level</label>
                 <input type="text" placeholder="Level" value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Pool / Phase</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Pool / Phase</label>
                 <input type="text" placeholder="Pool Phase" value={poolPhase} onChange={(e) => setPoolPhase(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Division</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Division</label>
                 <div className="flex gap-2">
                   {(['Men', 'Women', 'CoEd'] as const).map((d) => (
                     <button
                       key={d}
                       type="button"
                       onClick={() => setDivision(division === d ? '' : d)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                      className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${
                         division === d ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                       }`}
                     >
@@ -174,14 +198,14 @@ export default function SetupPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Category</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Category</label>
                 <div className="flex gap-2">
                   {(['Adult', 'Junior'] as const).map((c) => (
                     <button
                       key={c}
                       type="button"
                       onClick={() => setCategory(category === c ? '' : c)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                      className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${
                         category === c ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                       }`}
                     >
@@ -191,19 +215,54 @@ export default function SetupPage() {
                 </div>
               </div>
               <div className="col-span-2 border-t border-slate-700 pt-3 mt-1">
-                <label className="block text-xs text-slate-400 mb-2 font-medium">Officials</label>
+                <label className="block text-[15px] text-slate-400 mb-2 font-medium">Officials</label>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Scorer</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Scorer</label>
                 <input type="text" placeholder="Match Scorer" value={scorer} onChange={(e) => setScorer(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">1st Referee</label>
+                <label className="block text-[15px] text-slate-400 mb-1">1st Referee</label>
                 <input type="text" placeholder="1st Referee" value={referee} onChange={(e) => setReferee(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Down Referee</label>
+                <label className="block text-[15px] text-slate-400 mb-1">Down Referee</label>
                 <input type="text" placeholder="Down Ref" value={downRef} onChange={(e) => setDownRef(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-[15px] text-slate-400 mb-1">Work Team</label>
+                <input type="text" placeholder="Work Team" value={workTeam} onChange={(e) => setWorkTeam(e.target.value)} className={inputClass} />
+              </div>
+              <div className="relative">
+                <label className="block text-[15px] text-slate-400 mb-1">Region</label>
+                <input
+                  type="text"
+                  placeholder="Search region..."
+                  value={regionOpen ? regionSearch : (region ? `${region} — ${USAV_REGIONS.find(r => r.code === region)?.name || ''}` : '')}
+                  onChange={(e) => { setRegionSearch(e.target.value); setRegionOpen(true); }}
+                  onFocus={() => setRegionOpen(true)}
+                  className={inputClass}
+                />
+                {regionOpen && (
+                  <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-slate-700 border border-slate-600 rounded-lg shadow-lg">
+                    {USAV_REGIONS
+                      .filter(r => {
+                        const q = regionSearch.toLowerCase();
+                        return !q || r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
+                      })
+                      .map(r => (
+                        <button
+                          key={r.code}
+                          type="button"
+                          onClick={() => { setRegion(r.code); setRegionSearch(''); setRegionOpen(false); }}
+                          className="w-full text-left px-3 py-2 text-[17px] text-white hover:bg-slate-600 transition-colors"
+                        >
+                          <span className="font-bold">{r.code}</span> — {r.name}
+                        </button>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -222,22 +281,24 @@ export default function SetupPage() {
           Set Lineups
         </button>
 
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleDemo}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium py-3 rounded-xl transition-colors"
-          >
-            Demo Match
-          </button>
-          <button
-            type="button"
-            onClick={handleRandomGame}
-            className="flex-1 bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium py-3 rounded-xl transition-colors"
-          >
-            Random Game
-          </button>
-        </div>
+        {devTaps >= 5 && (
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleDemo}
+              className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium py-3 rounded-xl transition-colors"
+            >
+              Demo Match
+            </button>
+            <button
+              type="button"
+              onClick={handleRandomGame}
+              className="flex-1 bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium py-3 rounded-xl transition-colors"
+            >
+              Random Game
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );
@@ -267,7 +328,7 @@ export default function SetupPage() {
       competition: 'CCAA Conference', cityState: 'San Marcos, CA',
       hall: 'The Sports Center', matchNumber: '101', level: 'D2',
       division: 'Women', category: 'Adult', poolPhase: 'Pool A',
-      court: '1', scorer: 'Jane Smith', referee: 'John Doe', downRef: 'Mike Lee',
+      court: '1', scorer: 'Jane Smith', referee: 'John Doe', downRef: 'Mike Lee', workTeam: 'WT1', region: 'SC',
     });
     const homeLineup0: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
     const awayLineup0: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
@@ -445,6 +506,8 @@ export default function SetupPage() {
       scorer: 'Jane Smith',
       referee: 'John Doe',
       downRef: 'Mike Lee',
+      workTeam: 'WT1',
+      region: 'SC',
     });
 
     const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };

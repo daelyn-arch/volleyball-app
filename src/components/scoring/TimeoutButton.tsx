@@ -24,7 +24,7 @@ export default function TimeoutButton({ team, count, max, disabled }: Props) {
     <button
       onClick={handleClick}
       disabled={disabled || count >= max}
-      className="flex flex-col items-center justify-center bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 text-white text-xs font-semibold rounded-md transition-colors touch-manipulation"
+      className="flex flex-col items-center justify-center bg-slate-700/80 hover:bg-slate-600 disabled:opacity-40 text-white text-[14px] font-semibold rounded-md transition-colors touch-manipulation"
       style={{ width: '37px', height: '38px' }}
     >
       <span>T/O</span>

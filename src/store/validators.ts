@@ -23,32 +23,6 @@ export function validateSubstitution(
 ): string | null {
   const setIndex = state.currentSetIndex;
 
-  // Check max subs
-  const subCount = getSubCount(state.events, setIndex, team);
-  if (subCount >= state.config.maxSubsPerSet) {
-    return `Maximum ${state.config.maxSubsPerSet} substitutions reached for this set`;
-  }
-
-  // Check re-entry rule: a player can only re-enter for the same player who replaced them
-  const setEvents = getSetEvents(state.events, setIndex).filter(
-    (e) => e.type === 'substitution' && e.team === team
-  ) as Array<MatchEvent & { type: 'substitution' }>;
-
-  // Check if playerIn was previously subbed out
-  const prevSubOut = setEvents.find((e) => e.playerOut === playerIn);
-  if (prevSubOut) {
-    // playerIn was previously subbed out - they can only re-enter for the player who replaced them
-    if (prevSubOut.playerIn !== playerOut) {
-      return `Player #${playerIn} can only re-enter for player #${prevSubOut.playerIn} (USAV re-entry rule)`;
-    }
-  }
-
-  // Check if playerIn has already re-entered once (max one re-entry per set)
-  const reEntries = setEvents.filter((e) => e.playerIn === playerIn);
-  if (reEntries.length >= 1 && prevSubOut) {
-    return `Player #${playerIn} has already re-entered once this set`;
-  }
-
   // Check that playerOut is actually on the court
   const rotation = getCurrentRotation(state, setIndex);
   if (rotation) {

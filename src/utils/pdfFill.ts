@@ -651,6 +651,8 @@ async function fillDecidingSetSheet(
   drawAtField('Match 1st Referee', state.metadata?.referee || '', 9);
   drawAtField('1st', state.metadata?.referee || '', 9);
   drawAtField('Down ref', state.metadata?.downRef || '', 9);
+  drawAtField('Work Team', state.metadata?.workTeam || '', 9);
+  drawAtField('Region', state.metadata?.region || '', 10);
 
   // Checkboxes — draw filled squares directly (form checkboxes render incorrectly on rotated pages)
   const meta = state.metadata;
@@ -1095,6 +1097,8 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
     if (meta.scorer) safeSetField(form, 'Match Scorer', meta.scorer);
     if (meta.referee) { safeSetField(form, 'Match 1st Referee', meta.referee); safeSetField(form, '1st', meta.referee); }
     if (meta.downRef) safeSetField(form, 'Down Ref', meta.downRef);
+    if (meta.workTeam) safeSetField(form, 'Work Team', meta.workTeam);
+    if (meta.region) safeSetField(form, 'Region', meta.region);
   }
 
   // ── Match Time (set 1 start time) ──
