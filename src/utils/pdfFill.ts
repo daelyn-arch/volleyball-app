@@ -638,19 +638,19 @@ async function fillDecidingSetSheet(
   drawAtField('Team Right', rightTeamData.name, 8, true);
   drawAtField('Team Left Header', leftTeamData.name, 10, true);
   drawAtField('Team Right header', rightTeamData.name, 10, true);
-  drawAtField('Date', new Date(state.createdAt).toLocaleDateString(), 8);
-  drawAtField('Name of the Competition', state.metadata?.competition || '', 7);
-  drawAtField('City, State', state.metadata?.cityState || '', 7);
-  drawAtField('Hall', state.metadata?.hall || '', 7);
-  drawAtField('Match No', state.metadata?.matchNumber || '', 8);
-  drawAtField('Level', state.metadata?.level || '', 8);
-  drawAtField('Pool Phase', state.metadata?.poolPhase || '', 7);
-  drawAtField('Court', state.metadata?.court || '', 8);
-  drawAtField('Match Scorer', state.metadata?.scorer || '', 6);
-  drawAtField('match scorer', state.metadata?.scorer || '', 6);
-  drawAtField('Match 1st Referee', state.metadata?.referee || '', 6);
-  drawAtField('1st', state.metadata?.referee || '', 6);
-  drawAtField('Down ref', state.metadata?.downRef || '', 6);
+  drawAtField('Date', new Date(state.createdAt).toLocaleDateString(), 10, true);
+  drawAtField('Name of the Competition', state.metadata?.competition || '', 10);
+  drawAtField('City, State', state.metadata?.cityState || '', 10);
+  drawAtField('Hall', state.metadata?.hall || '', 10);
+  drawAtField('Match No', state.metadata?.matchNumber || '', 10);
+  drawAtField('Level', state.metadata?.level || '', 10);
+  drawAtField('Pool Phase', state.metadata?.poolPhase || '', 10);
+  drawAtField('Court', state.metadata?.court || '', 10);
+  drawAtField('Match Scorer', state.metadata?.scorer || '', 9);
+  drawAtField('match scorer', state.metadata?.scorer || '', 9);
+  drawAtField('Match 1st Referee', state.metadata?.referee || '', 9);
+  drawAtField('1st', state.metadata?.referee || '', 9);
+  drawAtField('Down ref', state.metadata?.downRef || '', 9);
 
   // Checkboxes — draw filled squares directly (form checkboxes render incorrectly on rotated pages)
   const meta = state.metadata;
@@ -672,7 +672,7 @@ async function fillDecidingSetSheet(
     if (!lineup) return;
     const suffix = postSwap ? '_post_swap' : '';
     for (let pos = 1; pos <= 6; pos++) {
-      drawCentered(`${prefix}_P${pos}${suffix}`, String(lineup[pos as CourtPosition]), 12, true);
+      drawCentered(`${prefix}_P${pos}${suffix}`, String(lineup[pos as CourtPosition]), 12);
     }
   };
   fillLineup(leftTeam, 'Left', false);
@@ -865,27 +865,27 @@ async function fillDecidingSetSheet(
     const row = idx + 1;
     const isDelay = e.sanctionType === 'delay-warning' || e.sanctionType === 'delay-penalty';
     const symbol = isDelay ? 'D' : (e.sanctionRecipient === 'player' && e.playerNumber ? String(e.playerNumber) : (e.sanctionRecipient ? recipientSymbol[e.sanctionRecipient] || '#' : '#'));
-    if (e.sanctionType === 'warning' || e.sanctionType === 'delay-warning') drawCentered(`yellow_card_${row}`, symbol, 7);
-    else if (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty') drawCentered(`red_card_${row}`, symbol, 7);
-    else if (e.sanctionType === 'expulsion') drawCentered(`Expulsion_${row}`, symbol, 7);
-    else if (e.sanctionType === 'disqualification') drawCentered(`Disqualified_${row}`, symbol, 7);
-    drawCentered(`penalized_team_${row}`, e.team === 'home' ? 'A' : 'B', 7);
-    drawCentered(`penalty_current_set_${row}`, String(e.setIndex + 1), 7);
-    drawCentered(`penalty_current_score_${row}`, `${e.homeScore}:${e.awayScore}`, 6);
+    if (e.sanctionType === 'warning' || e.sanctionType === 'delay-warning') drawCentered(`yellow_card_${row}`, symbol, 12);
+    else if (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty') drawCentered(`red_card_${row}`, symbol, 12);
+    else if (e.sanctionType === 'expulsion') drawCentered(`Expulsion_${row}`, symbol, 12);
+    else if (e.sanctionType === 'disqualification') drawCentered(`Disqualified_${row}`, symbol, 12);
+    drawCentered(`penalized_team_${row}`, e.team === 'home' ? 'A' : 'B', 12);
+    drawCentered(`penalty_current_set_${row}`, String(e.setIndex + 1), 12);
+    drawCentered(`penalty_current_score_${row}`, `${e.homeScore}:${e.awayScore}`, 10);
   });
 
   // ── Set/Match Results ──
   const score = getSetScore(state.events, setIndex);
   const winner = getSetWinner(score, setIndex, state.config);
   if (winner) {
-    drawAtField('Set 3 winner', winner === 'home' ? state.homeTeam.name : state.awayTeam.name, 7);
-    drawAtField('Set 3 Loser', winner === 'home' ? state.awayTeam.name : state.homeTeam.name, 7);
-    drawCentered('set 3 winner score', String(winner === 'home' ? score.home : score.away), 8);
-    drawCentered('set 3 loser score', String(winner === 'home' ? score.away : score.home), 8);
+    drawAtField('Set 3 winner', winner === 'home' ? state.homeTeam.name : state.awayTeam.name, 10, true);
+    drawAtField('Set 3 Loser', winner === 'home' ? state.awayTeam.name : state.homeTeam.name, 10, true);
+    drawCentered('set 3 winner score', String(winner === 'home' ? score.home : score.away), 12, true);
+    drawCentered('set 3 loser score', String(winner === 'home' ? score.away : score.home), 12, true);
   }
   if (state.matchComplete) {
     const setsWon = getSetsWon(state);
-    drawAtField('Match Winner', setsWon.home > setsWon.away ? state.homeTeam.name : state.awayTeam.name, 7);
+    drawAtField('Match Winner', setsWon.home > setsWon.away ? state.homeTeam.name : state.awayTeam.name, 10, true);
   }
 
   // ── Remarks ──
@@ -1051,7 +1051,7 @@ export async function fillScoresheet(state: MatchState, { flatten = true }: { fl
     if (meta.category === 'Adult') safeSetCheckbox(form, 'Adult', true);
     if (meta.category === 'Junior') safeSetCheckbox(form, 'Junior', true);
     if (meta.scorer) safeSetField(form, 'Match Scorer', meta.scorer);
-    if (meta.referee) safeSetField(form, 'Match 1st Referee', meta.referee);
+    if (meta.referee) { safeSetField(form, 'Match 1st Referee', meta.referee); safeSetField(form, '1st', meta.referee); }
     if (meta.downRef) safeSetField(form, 'Down Ref', meta.downRef);
   }
 
