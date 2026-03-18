@@ -970,10 +970,10 @@ async function fillDecidingSetSheet(
     const dim = Math.min(rect.width, rect.height);
     const h = dim / 2;
     const halfBase = h * 0.866;
-    // Rotate triangle 90° — apex points right in raw space (up visually after rotation)
-    const apex = { x: cx + h, y: cy };
-    const bl = { x: cx - h, y: cy - halfBase };
-    const br = { x: cx - h, y: cy + halfBase };
+    // Apex points left in raw space (down visually after 90° rotation = pointing up on screen)
+    const apex = { x: cx - h, y: cy };
+    const bl = { x: cx + h, y: cy - halfBase };
+    const br = { x: cx + h, y: cy + halfBase };
     const color = rgb(0, 0, 0);
     page.drawLine({ start: apex, end: bl, thickness: 0.75, color });
     page.drawLine({ start: bl, end: br, thickness: 0.75, color });
