@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
 import { useDialog } from '@/components/ThemedDialog';
@@ -22,19 +22,32 @@ export default function HomePage() {
   const matchComplete = useMatchStore((s) => s.matchComplete);
   const homeTeam = useMatchStore((s) => s.homeTeam);
   const awayTeam = useMatchStore((s) => s.awayTeam);
+  const syncedAt = useMatchStore((s) => s.syncedAt);
+  const triggerSync = useMatchStore((s) => s.triggerSync);
   const resetMatch = useMatchStore((s) => s.resetMatch);
+
+  const [syncing, setSyncing] = useState(false);
 
   const hasActiveMatch = matchId && !matchComplete;
   const hasCompletedMatch = matchId && matchComplete;
 
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await triggerSync();
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-full p-8 gap-8">
-      <h1 className="text-4xl font-bold text-white">Volleyball Scorekeeper</h1>
+    <div className="flex flex-col items-center justify-center h-dvh p-8 gap-8">
+      <h1 className="text-4xl font-bold tracking-[0.045em]"><span className="text-blue-500">S C O R E </span><span className="text-red-500">D A S H</span></h1>
       <p className="text-slate-400 text-lg text-center max-w-md">
         USAV-compliant scorekeeping. Tap to score, auto-generate official scoresheets.
       </p>
 
-      <div className="flex flex-col gap-4 w-full max-w-sm">
+      <div className="flex flex-col gap-4 w-full max-w-sm mx-auto">
         {hasActiveMatch && (
           <button
             onClick={() => navigate('/scoring')}
@@ -48,15 +61,38 @@ export default function HomePage() {
         )}
 
         {hasCompletedMatch && (
-          <button
-            onClick={() => navigate('/scoresheet')}
-            className="bg-green-700 hover:bg-green-800 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
-          >
-            View Scoresheet
-            <span className="block text-sm font-normal text-green-200 mt-1">
-              {homeTeam.name} vs {awayTeam.name}
-            </span>
-          </button>
+          <>
+            <button
+              onClick={() => navigate('/scoresheet')}
+              className="bg-green-700 hover:bg-green-800 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
+            >
+              View Scoresheet
+              <span className="block text-sm font-normal text-green-200 mt-1">
+                {homeTeam.name} vs {awayTeam.name}
+              </span>
+            </button>
+
+            {/* Sync status and manual retry */}
+            <div className="flex items-center gap-3">
+              {syncedAt ? (
+                <span className="text-green-400 text-sm flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+                  Synced to dashboard
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 disabled:opacity-60 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    {syncing ? 'Syncing...' : 'Sync to Dashboard'}
+                  </button>
+                  <span className="text-amber-400 text-sm">Not synced</span>
+                </>
+              )}
+            </div>
+          </>
         )}
 
         <button

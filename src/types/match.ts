@@ -126,6 +126,8 @@ export interface MatchMetadata {
   scorer: string;
   referee: string;
   downRef: string;
+  workTeam: string;
+  region: string;
 }
 
 // ── Match ─────────────────────────────────────────────────
@@ -154,6 +156,8 @@ export interface MatchState {
   liberoServingPositions: Record<string, { liberoNumber: number; replacedPlayer: number } | null>;
   /** Score correction remarks for the PDF */
   remarks: string[];
+  /** Timestamp when this match was successfully synced to Firestore (null if unsynced) */
+  syncedAt: number | null;
 }
 
 // ── Derived types ─────────────────────────────────────────

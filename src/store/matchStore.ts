@@ -14,6 +14,7 @@ import type {
 } from '@/types/match';
 import { DEFAULT_CONFIG } from '@/utils/scoring';
 import { isSetComplete, getSetWinner, isMatchComplete } from '@/utils/scoring';
+import { syncMatch } from '@/utils/syncMatch';
 import { getSetScore, getSetsWon, getCurrentRotation } from './derived';
 import { getServer, isFrontRow, findPlayerPosition, rotateLineup } from '@/utils/rotation';
 import { validateSubstitution, validateTimeout, validateLiberoReplacement, hasDelayWarning } from './validators';
@@ -119,6 +120,9 @@ interface MatchActions {
   // Roster
   addPlayerToRoster: (team: TeamSide, playerNumber: number) => void;
 
+  // Sync
+  triggerSync: () => Promise<void>;
+
   // Reset
   resetMatch: () => void;
 }
@@ -138,6 +142,8 @@ const EMPTY_METADATA: MatchMetadata = {
   scorer: '',
   referee: '',
   downRef: '',
+  workTeam: '',
+  region: '',
 };
 
 const initialState: MatchState = {
@@ -153,6 +159,7 @@ const initialState: MatchState = {
   metadata: { ...EMPTY_METADATA },
   liberoServingPositions: {},
   remarks: [],
+  syncedAt: null,
 };
 
 export const useMatchStore = create<MatchStore>()(
@@ -179,6 +186,7 @@ export const useMatchStore = create<MatchStore>()(
           metadata: { ...EMPTY_METADATA, ...metadata },
           liberoServingPositions: {},
           remarks: [],
+          syncedAt: null,
         });
       },
 
@@ -325,6 +333,13 @@ export const useMatchStore = create<MatchStore>()(
           matchComplete: newMatchComplete,
           ...(setsUpdated ? { sets } : {}),
         });
+
+        // Auto-sync to Firestore when match completes
+        if (newMatchComplete) {
+          syncMatch(get()).then((ok) => {
+            if (ok) set({ syncedAt: Date.now() });
+          });
+        }
       },
 
       decrementPoint: (team) => {
@@ -638,6 +653,13 @@ export const useMatchStore = create<MatchStore>()(
         }
 
         set({ events: allEvents, matchComplete: newMatchComplete, remarks });
+
+        // Auto-sync to Firestore when match completes
+        if (newMatchComplete) {
+          syncMatch(get()).then((ok) => {
+            if (ok) set({ syncedAt: Date.now() });
+          });
+        }
       },
 
       getWrongServerPointCount: (team) => {
@@ -927,6 +949,13 @@ export const useMatchStore = create<MatchStore>()(
             },
           };
         });
+      },
+
+      triggerSync: async () => {
+        const state = get();
+        if (!state.id || !state.matchComplete) return;
+        const ok = await syncMatch(state);
+        if (ok) set({ syncedAt: Date.now() });
       },
 
       resetMatch: () => {
