@@ -760,9 +760,7 @@ async function fillDecidingSetSheet(
   const leftPreChange = leftSwitchPoint ? leftScore.filter(e => e.point <= leftSwitchPoint) : leftScore;
   const leftPostChange = leftSwitchPoint ? leftScore.filter(e => e.point > leftSwitchPoint) : [];
   fillRunningScoreSide(leftPreChange, leftTeam, 'left');
-  for (const entry of leftPostChange) {
-    if (entry.point >= 1 && entry.point <= 36) drawInstructions.push({ fieldName: `${entry.point}_score_Left_post_change`, shape: 'slash' });
-  }
+  fillRunningScoreSide(leftPostChange, leftTeam, 'Left_post_change');
   fillRunningScoreSide(rightScore, rightTeam, 'right');
 
   if (switchScore) {
