@@ -915,12 +915,12 @@ async function fillDecidingSetSheet(
     try {
       const f = form.getTextField('Remarks');
       const rect = f.acroField.getWidgets()[0].getRectangle();
-      // On rotated page: rect.x = visual bottom, rect.x + rect.width = visual top
+      // On rotated page: visual top = LOW raw X, visual bottom = HIGH raw X
       // rect.y = visual left edge, rect.height = visual width
       const fontSize = 6;
       const lineHeight = fontSize * 1.5;
-      // Start at visual top-left: high raw X, low raw Y
-      let xPos = rect.x + rect.width - fontSize - 2; // visual top
+      // Start at visual top-left: low raw X
+      let xPos = rect.x + fontSize + 2; // visual top
       for (const line of decidingRemarks) {
         page.drawText(line, {
           x: xPos,
@@ -930,8 +930,8 @@ async function fillDecidingSetSheet(
           rotate: degrees(90),
           color: rgb(0, 0, 0),
         });
-        xPos -= lineHeight; // move down (decreasing raw X)
-        if (xPos < rect.x + 2) break; // stop if we reach the bottom
+        xPos += lineHeight; // move down (increasing raw X)
+        if (xPos > rect.x + rect.width - 2) break; // stop if we reach the bottom
       }
     } catch { /* field not found */ }
   }
