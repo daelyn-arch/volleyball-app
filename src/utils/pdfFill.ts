@@ -954,47 +954,60 @@ async function fillDecidingSetSheet(
   if (winner3) {
     const drawTBarRange = (fieldPrefix: string, startPoint: number, endPoint: number) => {
       if (startPoint > endPoint) return;
-      // Get rects for first and last unused cells
-      const firstRect = getFieldRect(form, `${startPoint}_score_${fieldPrefix}`);
-      const lastRect = getFieldRect(form, `${endPoint}_score_${fieldPrefix}`);
-      if (!firstRect || !lastRect) return;
 
-      // On rotated page: raw x = visual vertical, raw y = visual horizontal
-      // The continuous bar should go along raw y (visual horizontal direction)
-      const cx = firstRect.x + firstRect.width / 2; // visual vertical center
-      const barStart = Math.min(firstRect.y, lastRect.y);
-      const barEnd = Math.max(firstRect.y + firstRect.height, lastRect.y + lastRect.height);
+      // Group cells by row (cells in the same row have similar raw x values)
+      const rows: Array<Array<{ pt: number; rect: { x: number; y: number; width: number; height: number } }>> = [];
+      let currentRow: typeof rows[0] = [];
 
-      // Horizontal bar (visual) = line along raw y
-      page.drawLine({
-        start: { x: cx, y: barStart },
-        end: { x: cx, y: barEnd },
-        thickness: 0.8, color: rgb(0, 0, 0),
-      });
-      // Vertical stem (visual) at the start = line along raw x
-      page.drawLine({
-        start: { x: firstRect.x + 1, y: firstRect.y + firstRect.height / 2 },
-        end: { x: cx, y: firstRect.y + firstRect.height / 2 },
-        thickness: 0.8, color: rgb(0, 0, 0),
-      });
+      for (let pt = startPoint; pt <= endPoint; pt++) {
+        const rect = getFieldRect(form, `${pt}_score_${fieldPrefix}`);
+        if (!rect) continue;
+        // If this cell's raw x is significantly different from the previous, it's a new row
+        if (currentRow.length > 0 && Math.abs(rect.x - currentRow[0].rect.x) > 5) {
+          rows.push(currentRow);
+          currentRow = [];
+        }
+        currentRow.push({ pt, rect });
+      }
+      if (currentRow.length > 0) rows.push(currentRow);
+
+      // Draw T-bar for each row
+      for (const row of rows) {
+        if (row.length === 0) continue;
+        const first = row[0].rect;
+        const last = row[row.length - 1].rect;
+        const cx = first.x + first.width / 2;
+
+        // Horizontal bar (visual) = line along raw y across all cells in this row
+        page.drawLine({
+          start: { x: cx, y: Math.min(first.y, last.y) },
+          end: { x: cx, y: Math.max(first.y + first.height, last.y + last.height) },
+          thickness: 0.8, color: rgb(0, 0, 0),
+        });
+        // Vertical stem (visual) at the start cell
+        page.drawLine({
+          start: { x: first.x + 1, y: first.y + first.height / 2 },
+          end: { x: cx, y: first.y + first.height / 2 },
+          thickness: 0.8, color: rgb(0, 0, 0),
+        });
+      }
     };
 
     const leftFinalScore = leftTeam === 'home' ? score3.home : score3.away;
     const rightFinalScore = rightTeam === 'home' ? score3.home : score3.away;
     const higherScore = Math.max(leftFinalScore, rightFinalScore);
 
-    // Left pre-change: unused cells from lastScored+1 to min(13, higherScore)
-    const leftPreMax = Math.min(13, higherScore);
-    const leftPreStart = leftSwitchPoint ? Math.min(leftFinalScore, leftSwitchPoint) + 1 : leftFinalScore + 1;
-    if (leftPreStart <= leftPreMax) drawTBarRange('left', leftPreStart, leftPreMax);
+    // Only T-bar the right side (continuous 1-36 grid) and left post-change
+    // No T-bar on left pre-change (1-13 grid is small, no unused columns to mark)
 
-    // Left post-change: unused cells
-    if (leftSwitchPoint && leftFinalScore > leftSwitchPoint) {
-      drawTBarRange('Left_post_change', leftFinalScore + 1, higherScore);
-    }
     // Right: unused cells from rightFinalScore+1 to higherScore
-    if (rightFinalScore + 1 <= higherScore) {
+    if (rightFinalScore < higherScore) {
       drawTBarRange('right', rightFinalScore + 1, higherScore);
+    }
+
+    // Left post-change: unused cells after left team's last scored point
+    if (leftSwitchPoint && leftFinalScore > leftSwitchPoint && leftFinalScore < higherScore) {
+      drawTBarRange('Left_post_change', leftFinalScore + 1, higherScore);
     }
   }
 
