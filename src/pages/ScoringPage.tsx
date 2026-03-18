@@ -262,13 +262,6 @@ export default function ScoringPage() {
               );
             });
           })()}
-          {/* Sub indicators — landscape only */}
-          {!setComplete && !matchComplete && (
-            <>
-              <button type="button" onClick={() => setSubHint(n => n + 1)} className={`hidden landscape:flex shrink-0 bg-blue-700 text-white text-[14px] font-bold px-2 items-center rounded-md whitespace-nowrap`} style={{ height: 30 }}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - homeSubCount}</span>)</button>
-              <button type="button" onClick={() => setSubHint(n => n + 1)} className={`hidden landscape:flex shrink-0 bg-red-700 text-white text-[14px] font-bold px-2 items-center rounded-md whitespace-nowrap`} style={{ height: 30 }}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - awaySubCount}</span>)</button>
-            </>
-          )}
           {/* Status messages — landscape only, in top bar */}
           <div className="hidden landscape:block min-w-0 truncate">
             {justSwitched && (
@@ -290,6 +283,13 @@ export default function ScoringPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {/* Sub indicators — landscape only, fixed position next to Undo */}
+          {!setComplete && !matchComplete && (
+            <>
+              <button type="button" onClick={() => setSubHint(n => n + 1)} className={`hidden landscape:flex shrink-0 bg-blue-700 text-white text-[14px] font-bold px-2 items-center rounded-md whitespace-nowrap`} style={{ height: 30 }}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - homeSubCount}</span>)</button>
+              <button type="button" onClick={() => setSubHint(n => n + 1)} className={`hidden landscape:flex shrink-0 bg-red-700 text-white text-[14px] font-bold px-2 items-center rounded-md whitespace-nowrap`} style={{ height: 30 }}>Subs&nbsp;(<span className="text-white">{config.maxSubsPerSet - awaySubCount}</span>)</button>
+            </>
+          )}
           <UndoButton onUndo={undo} disabled={events.length === 0} lastEvent={events[events.length - 1]} />
           <button
             onClick={() => {

@@ -99,7 +99,7 @@ export default function EventLog({ events, setIndex, homeTeam, awayTeam, actions
   return (
     <div className="bg-slate-900 border-t border-slate-900 shrink-0">
       {actions && <div className="px-4 py-2">{actions}</div>}
-      <div ref={containerRef} className="px-4 pb-2 max-h-[468px] overflow-y-auto">
+      <div ref={containerRef} className="px-4 pb-2 overflow-y-auto">
         <div>
         {setEvents.map((e, i) => (
           <div key={e.id}>

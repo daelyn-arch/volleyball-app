@@ -123,6 +123,9 @@ interface MatchActions {
   // Sync
   triggerSync: () => Promise<void>;
 
+  // Load a saved match (for viewing history)
+  loadMatch: (state: MatchState) => void;
+
   // Reset
   resetMatch: () => void;
 }
@@ -956,6 +959,10 @@ export const useMatchStore = create<MatchStore>()(
         if (!state.id || !state.matchComplete) return;
         const ok = await syncMatch(state);
         if (ok) set({ syncedAt: Date.now() });
+      },
+
+      loadMatch: (state: MatchState) => {
+        set(state);
       },
 
       resetMatch: () => {

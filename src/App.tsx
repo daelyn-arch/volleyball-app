@@ -7,6 +7,7 @@ import BetweenSetsPage from './pages/BetweenSetsPage';
 import ScoresheetViewPage from './pages/ScoresheetViewPage';
 import CalibrationPage from './pages/CalibrationPage';
 import MatchLogPage from './pages/MatchLogPage';
+import MatchHistoryPage from './pages/MatchHistoryPage';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/between-sets" element={<BetweenSetsPage />} />
         <Route path="/scoresheet" element={<ScoresheetViewPage />} />
         <Route path="/match-log" element={<MatchLogPage />} />
+        <Route path="/history" element={<MatchHistoryPage />} />
         <Route path="/calibrate" element={<CalibrationPage />} />
       </Routes>
     </div>

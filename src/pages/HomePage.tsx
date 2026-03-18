@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
+import { useMatchHistory } from '@/store/matchHistory';
 import { useDialog } from '@/components/ThemedDialog';
 
 export default function HomePage() {
@@ -27,7 +28,17 @@ export default function HomePage() {
   const triggerSync = useMatchStore((s) => s.triggerSync);
   const resetMatch = useMatchStore((s) => s.resetMatch);
 
+  const archiveMatch = useMatchHistory((s) => s.archiveMatch);
+  const historyCount = useMatchHistory((s) => s.matches.length);
   const [syncing, setSyncing] = useState(false);
+
+  // Archive completed matches
+  const fullState = useMatchStore.getState();
+  useEffect(() => {
+    if (matchId && matchComplete) {
+      archiveMatch(fullState);
+    }
+  }, [matchId, matchComplete]);
 
   // If a match was created but lineups were never set, discard it
   const firstSetHasLineups = sets[0]?.homeLineup && sets[0]?.awayLineup;
@@ -69,41 +80,6 @@ export default function HomePage() {
           </button>
         )}
 
-        {hasCompletedMatch && (
-          <>
-            <button
-              onClick={() => navigate('/scoresheet')}
-              className="bg-green-700 hover:bg-green-800 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
-            >
-              View Scoresheet
-              <span className="block text-sm font-normal text-green-200 mt-1">
-                {homeTeam.name} vs {awayTeam.name}
-              </span>
-            </button>
-
-            {/* Sync status and manual retry */}
-            <div className="flex items-center gap-3">
-              {syncedAt ? (
-                <span className="text-green-400 text-sm flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-                  Synced to dashboard
-                </span>
-              ) : (
-                <>
-                  <button
-                    onClick={handleSync}
-                    disabled={syncing}
-                    className="bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 disabled:opacity-60 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
-                  >
-                    {syncing ? 'Syncing...' : 'Sync to Dashboard'}
-                  </button>
-                  <span className="text-amber-400 text-sm">Not synced</span>
-                </>
-              )}
-            </div>
-          </>
-        )}
-
         <button
           onClick={async () => {
             if (hasActiveMatch) {
@@ -113,9 +89,36 @@ export default function HomePage() {
             resetMatch();
             navigate('/setup');
           }}
-          className="bg-slate-700 hover:bg-slate-600 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
+          className="bg-blue-700 hover:bg-blue-600 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
         >
           New Match
+        </button>
+
+        <button
+          onClick={() => navigate('/history')}
+          className="bg-slate-800 hover:bg-slate-700 border border-green-500 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
+        >
+          Scoresheets
+          {historyCount > 0 && (
+            <span className="block text-sm font-normal text-slate-400 mt-1">
+              {historyCount} match{historyCount !== 1 ? 'es' : ''}
+            </span>
+          )}
+          {hasCompletedMatch && (
+            syncedAt ? (
+              <span className="flex items-center justify-center gap-1.5 text-green-400 text-sm font-normal mt-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+                Saved to Cloud
+              </span>
+            ) : (
+              <span
+                onClick={(e) => { e.stopPropagation(); handleSync(); }}
+                className="block text-amber-400 text-sm font-normal mt-1"
+              >
+                {syncing ? 'Syncing...' : 'Not synced — tap to sync'}
+              </span>
+            )
+          )}
         </button>
       </div>
     </div>

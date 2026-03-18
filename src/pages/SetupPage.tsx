@@ -83,7 +83,15 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-full p-6 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold text-white mb-6">Match Setup</h1>
+      <div className="flex items-center mb-6">
+        <button
+          onClick={() => navigate('/')}
+          className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors shrink-0"
+        >
+          &larr;
+        </button>
+        <h1 className="text-3xl font-bold text-white flex-1 text-center mr-12">Match Setup</h1>
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         {/* Match format */}
