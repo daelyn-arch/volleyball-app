@@ -572,15 +572,17 @@ async function fillDecidingSetSheet(
   const rightTeamData = rightTeam === 'home' ? state.homeTeam : state.awayTeam;
 
   // Helper: draw text at a field's position on the 90°-rotated page
+  // On rotated page: raw width = visual height, raw height = visual width
   function drawAtField(fieldName: string, text: string, fontSize?: number, useBold?: boolean) {
     try {
       const f = form.getTextField(fieldName);
       const rect = f.acroField.getWidgets()[0].getRectangle();
       const sz = fontSize || 8;
       const usedFont = useBold ? fontBold : font;
-      // For 90° rotated page: draw with rotate=90° at raw coords
+      // Vertically center: raw x + width/2 + ascent/3
+      const vCenter = rect.x + rect.width / 2 + sz * 0.3;
       page.drawText(text, {
-        x: rect.x + rect.width,
+        x: vCenter,
         y: rect.y + 2,
         size: sz,
         font: usedFont,
@@ -590,22 +592,42 @@ async function fillDecidingSetSheet(
     } catch { /* field not found */ }
   }
 
-  // Helper: draw centered text in a field
-  function drawCentered(fieldName: string, text: string, fontSize?: number) {
+  // Helper: draw centered text in a field (both horizontally and vertically)
+  function drawCentered(fieldName: string, text: string, fontSize?: number, useBold?: boolean) {
     try {
       const f = form.getTextField(fieldName);
       const rect = f.acroField.getWidgets()[0].getRectangle();
       const sz = fontSize || 8;
-      const textWidth = font.widthOfTextAtSize(text, sz);
-      // rect.height is visual width, rect.width is visual height (due to rotation)
+      const usedFont = useBold ? fontBold : font;
+      const textWidth = usedFont.widthOfTextAtSize(text, sz);
+      // Horizontal center (visual): center along raw y-axis
       const visualWidth = rect.height;
-      const offset = Math.max(0, (visualWidth - textWidth) / 2);
+      const hOffset = Math.max(0, (visualWidth - textWidth) / 2);
+      // Vertical center (visual): center along raw x-axis
+      const vCenter = rect.x + rect.width / 2 + sz * 0.3;
       page.drawText(text, {
-        x: rect.x + rect.width,
-        y: rect.y + offset,
+        x: vCenter,
+        y: rect.y + hOffset,
         size: sz,
-        font,
+        font: usedFont,
         rotate: degrees(90),
+        color: rgb(0, 0, 0),
+      });
+    } catch { /* field not found */ }
+  }
+
+  // Helper: draw a checkbox mark at a field position
+  function drawCheck(fieldName: string) {
+    try {
+      const f = form.getCheckBox ? form.getCheckBox(fieldName) : form.getTextField(fieldName);
+      const rect = f.acroField.getWidgets()[0].getRectangle();
+      const cx = rect.x + rect.width / 2;
+      const cy = rect.y + rect.height / 2;
+      const s = Math.min(rect.width, rect.height) * 0.35;
+      // Draw a filled square/check mark centered in the checkbox
+      page.drawRectangle({
+        x: cx - s, y: cy - s,
+        width: s * 2, height: s * 2,
         color: rgb(0, 0, 0),
       });
     } catch { /* field not found */ }
@@ -630,14 +652,14 @@ async function fillDecidingSetSheet(
   drawAtField('1st', state.metadata?.referee || '', 6);
   drawAtField('Down ref', state.metadata?.downRef || '', 6);
 
-  // Checkboxes still work fine via form
+  // Checkboxes — draw filled squares directly (form checkboxes render incorrectly on rotated pages)
   const meta = state.metadata;
   if (meta) {
-    if (meta.division === 'Men') safeSetCheckbox(form, 'Men', true);
-    if (meta.division === 'Women') safeSetCheckbox(form, 'Women', true);
-    if (meta.division === 'CoEd') safeSetCheckbox(form, 'CoEd', true);
-    if (meta.category === 'Adult') safeSetCheckbox(form, 'Adult', true);
-    if (meta.category === 'Junior') safeSetCheckbox(form, 'Junior', true);
+    if (meta.division === 'Men') drawCheck('Men');
+    if (meta.division === 'Women') drawCheck('Women');
+    if (meta.division === 'CoEd') drawCheck('CoEd');
+    if (meta.category === 'Adult') drawCheck('Adult');
+    if (meta.category === 'Junior') drawCheck('Junior');
   }
 
   // Team A/B
@@ -650,7 +672,7 @@ async function fillDecidingSetSheet(
     if (!lineup) return;
     const suffix = postSwap ? '_post_swap' : '';
     for (let pos = 1; pos <= 6; pos++) {
-      drawCentered(`${prefix}_P${pos}${suffix}`, String(lineup[pos as CourtPosition]), 9);
+      drawCentered(`${prefix}_P${pos}${suffix}`, String(lineup[pos as CourtPosition]), 12, true);
     }
   };
   fillLineup(leftTeam, 'Left', false);
@@ -748,13 +770,14 @@ async function fillDecidingSetSheet(
     drawCentered('Left Team A or B', leftTeam === 'home' ? 'A' : 'B', 8);
   }
 
-  // ── Service Rounds ──
+  // ── Service Rounds (with final score circle) ──
   const fillServiceRounds = (team: TeamSide, prefix: string) => {
     const serviceRounds = getServiceRounds(state.events, setIndex, setData);
     const teamRounds = team === 'home' ? serviceRounds.home : serviceRounds.away;
     const isReceivingTeam = setData.firstServe !== team;
     const srRowByCol: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-    if (isReceivingTeam) { srRowByCol[1] = 1; drawCentered(`${prefix}_1_score_service_round_1`, 'X', 7); }
+    if (isReceivingTeam) { srRowByCol[1] = 1; drawCentered(`${prefix}_1_score_service_round_1`, 'X', 10); }
+    let lastSrFieldName = '';
     for (let i = 0; i < teamRounds.length; i++) {
       const round = teamRounds[i];
       const col = isReceivingTeam ? ((i + 1) % 6) + 1 : (i % 6) + 1;
@@ -763,7 +786,33 @@ async function fillDecidingSetSheet(
       if (row > 6) continue;
       if (round.endScore) {
         const teamEndScore = team === 'home' ? round.endScore.home : round.endScore.away;
-        drawCentered(`${prefix}_${col}_score_service_round_${row}`, String(teamEndScore), 7);
+        const fieldName = `${prefix}_${col}_score_service_round_${row}`;
+        drawCentered(fieldName, String(teamEndScore), 10);
+        lastSrFieldName = fieldName;
+      }
+    }
+    // Circle the final score when set is complete
+    const setScore3 = getSetScore(state.events, setIndex);
+    const setWinner3 = getSetWinner(setScore3, setIndex, state.config);
+    if (setWinner3) {
+      const lastRound = teamRounds[teamRounds.length - 1];
+      const teamWonServing = lastRound && lastRound.servingTeam === team && setWinner3 === team;
+      if (teamWonServing && lastSrFieldName) {
+        // Circle the last entry
+        const rect = getFieldRect(form, lastSrFieldName);
+        if (rect) drawCircleOnPage(page, rect);
+      } else {
+        // Place final score in next slot and circle it
+        const finalScore = team === 'home' ? setScore3.home : setScore3.away;
+        const nextCol = isReceivingTeam ? ((teamRounds.length + 1) % 6) + 1 : (teamRounds.length % 6) + 1;
+        srRowByCol[nextCol]++;
+        const nextRow = srRowByCol[nextCol];
+        if (nextRow <= 6) {
+          const fieldName = `${prefix}_${nextCol}_score_service_round_${nextRow}`;
+          drawCentered(fieldName, String(finalScore), 10);
+          const rect = getFieldRect(form, fieldName);
+          if (rect) drawCircleOnPage(page, rect);
+        }
       }
     }
   };
@@ -786,10 +835,10 @@ async function fillDecidingSetSheet(
       subCountByPos[posCol] = count;
       const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
       const ordinal = ordinals[count - 1] || `${count}th`;
-      drawCentered(`${prefix}_${posCol}_${ordinal}_sub`, String(sub.playerIn), 7);
-      drawCentered(`${prefix}_${posCol}_${ordinal}_sub_score`, `${sub.homeScore}:${sub.awayScore}`, 5);
+      drawCentered(`${prefix}_${posCol}_${ordinal}_sub`, String(sub.playerIn), 9);
+      drawCentered(`${prefix}_${posCol}_${ordinal}_sub_score`, `${sub.homeScore}:${sub.awayScore}`, 7);
     }
-    for (let i = 1; i <= subs.length && i <= 12; i++) drawCentered(`${prefix}_sub_${i}`, 'X', 6);
+    for (let i = 1; i <= subs.length && i <= 12; i++) drawCentered(`${prefix}_sub_${i}`, 'X', 8);
   };
   fillSubs(leftTeam, 'Left');
   fillSubs(rightTeam, 'Right');
@@ -899,48 +948,54 @@ async function fillDecidingSetSheet(
   }
 
   // ── T-bars for unused score cells ──
+  // Draw a continuous line through unused cells with a stem at the start
   const score3 = getSetScore(state.events, setIndex);
   const winner3 = getSetWinner(score3, setIndex, state.config);
   if (winner3) {
-    const drawTBar = (fieldPrefix: string, maxPoint: number, teamScoredUpTo: number) => {
-      for (let pt = teamScoredUpTo + 1; pt <= maxPoint; pt++) {
-        const fieldName = `${pt}_score_${fieldPrefix}`;
-        const rect = getFieldRect(form, fieldName);
-        if (!rect) continue;
-        // T-bar: horizontal line through middle + vertical line on left side (rotated for 90° page)
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        // Horizontal bar (visual, = vertical in raw due to rotation)
-        page.drawLine({
-          start: { x: rect.x + 1, y: cy },
-          end: { x: rect.x + rect.width - 1, y: cy },
-          thickness: 0.8, color: rgb(0, 0, 0),
-        });
-        // Vertical stem (visual, = horizontal in raw)
-        page.drawLine({
-          start: { x: cx, y: rect.y + 1 },
-          end: { x: cx, y: cy },
-          thickness: 0.8, color: rgb(0, 0, 0),
-        });
-      }
+    const drawTBarRange = (fieldPrefix: string, startPoint: number, endPoint: number) => {
+      if (startPoint > endPoint) return;
+      // Get rects for first and last unused cells
+      const firstRect = getFieldRect(form, `${startPoint}_score_${fieldPrefix}`);
+      const lastRect = getFieldRect(form, `${endPoint}_score_${fieldPrefix}`);
+      if (!firstRect || !lastRect) return;
+
+      // On rotated page: raw x = visual vertical, raw y = visual horizontal
+      // The continuous bar should go along raw y (visual horizontal direction)
+      const cx = firstRect.x + firstRect.width / 2; // visual vertical center
+      const barStart = Math.min(firstRect.y, lastRect.y);
+      const barEnd = Math.max(firstRect.y + firstRect.height, lastRect.y + lastRect.height);
+
+      // Horizontal bar (visual) = line along raw y
+      page.drawLine({
+        start: { x: cx, y: barStart },
+        end: { x: cx, y: barEnd },
+        thickness: 0.8, color: rgb(0, 0, 0),
+      });
+      // Vertical stem (visual) at the start = line along raw x
+      page.drawLine({
+        start: { x: firstRect.x + 1, y: firstRect.y + firstRect.height / 2 },
+        end: { x: cx, y: firstRect.y + firstRect.height / 2 },
+        thickness: 0.8, color: rgb(0, 0, 0),
+      });
     };
 
     const leftFinalScore = leftTeam === 'home' ? score3.home : score3.away;
     const rightFinalScore = rightTeam === 'home' ? score3.home : score3.away;
     const higherScore = Math.max(leftFinalScore, rightFinalScore);
 
-    // Left pre-change: up to 13
-    if (leftSwitchPoint) {
-      drawTBar('left', Math.min(13, higherScore), Math.min(leftFinalScore, leftSwitchPoint));
-    } else {
-      drawTBar('left', Math.min(13, higherScore), leftFinalScore);
-    }
-    // Left post-change: up to higherScore
+    // Left pre-change: unused cells from lastScored+1 to min(13, higherScore)
+    const leftPreMax = Math.min(13, higherScore);
+    const leftPreStart = leftSwitchPoint ? Math.min(leftFinalScore, leftSwitchPoint) + 1 : leftFinalScore + 1;
+    if (leftPreStart <= leftPreMax) drawTBarRange('left', leftPreStart, leftPreMax);
+
+    // Left post-change: unused cells
     if (leftSwitchPoint && leftFinalScore > leftSwitchPoint) {
-      drawTBar('Left_post_change', higherScore, leftFinalScore);
+      drawTBarRange('Left_post_change', leftFinalScore + 1, higherScore);
     }
-    // Right: up to higherScore
-    drawTBar('right', higherScore, rightFinalScore);
+    // Right: unused cells from rightFinalScore+1 to higherScore
+    if (rightFinalScore + 1 <= higherScore) {
+      drawTBarRange('right', rightFinalScore + 1, higherScore);
+    }
   }
 
   if (flatten) form.flatten();
