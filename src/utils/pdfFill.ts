@@ -999,19 +999,20 @@ async function fillDecidingSetSheet(
 
     const leftFinalScore = leftTeam === 'home' ? score3.home : score3.away;
     const rightFinalScore = rightTeam === 'home' ? score3.home : score3.away;
-    const higherScore = Math.max(leftFinalScore, rightFinalScore);
 
-    // Only T-bar the right side (continuous 1-36 grid) and left post-change
-    // No T-bar on left pre-change (1-13 grid is small, no unused columns to mark)
+    // T-bars go through ALL remaining cells to 36 (deciding set can go beyond 15 with win-by-2)
 
-    // Right: unused cells from rightFinalScore+1 to higherScore
-    if (rightFinalScore < higherScore) {
-      drawTBarRange('right', rightFinalScore + 1, higherScore);
+    // Right side: from rightFinalScore+1 to 36
+    if (rightFinalScore < 36) {
+      drawTBarRange('right', rightFinalScore + 1, 36);
     }
 
-    // Left post-change: unused cells after left team's last scored point
-    if (leftSwitchPoint && leftFinalScore > leftSwitchPoint && leftFinalScore < higherScore) {
-      drawTBarRange('Left_post_change', leftFinalScore + 1, higherScore);
+    // Left post-change: from leftFinalScore+1 to 36
+    if (leftSwitchPoint && leftFinalScore > leftSwitchPoint && leftFinalScore < 36) {
+      drawTBarRange('Left_post_change', leftFinalScore + 1, 36);
+    } else if (!leftSwitchPoint && leftFinalScore < 36) {
+      // No switch happened — use left pre-change fields up to 13, then nothing beyond
+      // (left pre-change only has fields 1-13, no T-bar needed there)
     }
   }
 
