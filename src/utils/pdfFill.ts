@@ -30,7 +30,7 @@ import { getSetWinner } from '@/utils/scoring';
 type SetSuffix = '' | '_2';
 type SidePrefix = 'Left' | 'Right';
 
-interface DrawInstruction {
+export interface DrawInstruction {
   shape: 'triangle' | 'circle' | 'slash';
   fieldName?: string;          // resolve rect from form field
   rect?: { x: number; y: number; width: number; height: number }; // direct rect
@@ -52,7 +52,7 @@ function getSidePrefix(side: 'left' | 'right'): SidePrefix {
   return side === 'left' ? 'Left' : 'Right';
 }
 
-function safeSetField(form: any, name: string, value: string, alignment?: TextAlignment, fontSize?: number) {
+export function safeSetField(form: any, name: string, value: string, alignment?: TextAlignment, fontSize?: number) {
   try {
     const field = form.getTextField(name);
     // Remove maxLength constraint if it would block the value
@@ -74,7 +74,7 @@ function safeSetField(form: any, name: string, value: string, alignment?: TextAl
   }
 }
 
-function safeSetCheckbox(form: any, name: string, checked: boolean) {
+export function safeSetCheckbox(form: any, name: string, checked: boolean) {
   try {
     const field = form.getCheckBox(name);
     if (checked) field.check();
@@ -87,7 +87,7 @@ function safeSetCheckbox(form: any, name: string, checked: boolean) {
 // ── Shape Drawing Helpers ────────────────────────────────────
 
 /** Get a form field's widget rectangle (position + size on the PDF page) */
-function getFieldRect(form: any, fieldName: string): { x: number; y: number; width: number; height: number } | null {
+export function getFieldRect(form: any, fieldName: string): { x: number; y: number; width: number; height: number } | null {
   try {
     const field = form.getTextField(fieldName);
     const widgets = field.acroField.getWidgets();
@@ -99,7 +99,7 @@ function getFieldRect(form: any, fieldName: string): { x: number; y: number; wid
 }
 
 /** Get the page index for a form field widget */
-function getFieldPageIndex(form: any, doc: PDFDocument, fieldName: string): number {
+export function getFieldPageIndex(form: any, doc: PDFDocument, fieldName: string): number {
   try {
     const field = form.getTextField(fieldName);
     const widgets = field.acroField.getWidgets();
@@ -121,7 +121,7 @@ function getFieldPageIndex(form: any, doc: PDFDocument, fieldName: string): numb
 }
 
 /** Draw a triangle outline around a field */
-function drawTriangleOnPage(
+export function drawTriangleOnPage(
   page: PDFPage,
   rect: { x: number; y: number; width: number; height: number }
 ) {
@@ -146,7 +146,7 @@ function drawTriangleOnPage(
 }
 
 /** Draw a perfectly round circle outline around a field */
-function drawCircleOnPage(
+export function drawCircleOnPage(
   page: PDFPage,
   rect: { x: number; y: number; width: number; height: number }
 ) {
@@ -167,7 +167,7 @@ function drawCircleOnPage(
 }
 
 /** Draw a bold forward slash through a field */
-function drawSlashOnPage(
+export function drawSlashOnPage(
   page: PDFPage,
   rect: { x: number; y: number; width: number; height: number }
 ) {

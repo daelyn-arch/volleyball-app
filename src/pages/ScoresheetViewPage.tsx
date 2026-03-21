@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
 import { getSetSummary, getSetsWon, getSetScore } from '@/store/derived';
 import { isSetComplete } from '@/utils/scoring';
+import { getPdfStyle } from '@/utils/pdfStyleSetting';
 import ScoresheetSet from '@/components/scoresheet/ScoresheetSet';
 import ScoresheetPdfDownload from '@/components/scoresheet-pdf/ScoresheetPdfDownload';
 
@@ -13,6 +15,32 @@ export default function ScoresheetViewPage() {
   const score = getSetScore(events, currentSetIndex);
   const setComplete = isSetComplete(score, currentSetIndex, config);
   const canStartNextSet = setComplete && !matchComplete;
+  const [cifLoading, setCifLoading] = useState(false);
+
+  async function handleCifPdf() {
+    setCifLoading(true);
+    try {
+      if (getPdfStyle() === 'official') {
+        const { downloadCifScoresheet } = await import('@/utils/cifPdfFill');
+        await downloadCifScoresheet(useMatchStore.getState());
+      } else {
+        const { downloadCifPdf } = await import('@/components/scoresheet-pdf/generateCifPdf');
+        await downloadCifPdf();
+      }
+    } catch (err: any) {
+      if (getPdfStyle() === 'official') {
+        try {
+          const { downloadCifPdf } = await import('@/components/scoresheet-pdf/generateCifPdf');
+          await downloadCifPdf();
+          return;
+        } catch { /* fallthrough */ }
+      }
+      console.error('CIF PDF failed:', err);
+      alert('PDF generation failed: ' + (err?.message || err));
+    } finally {
+      setCifLoading(false);
+    }
+  }
 
   // Include all sets up to and including the current one
   const setsPlayed: number[] = [];
@@ -25,20 +53,18 @@ export default function ScoresheetViewPage() {
       {/* Header */}
       <div className="bg-slate-800 px-4 py-3 flex items-center gap-2 relative">
         <button
-          onClick={() => navigate(matchComplete ? '/' : '/scoring')}
+          onClick={() => navigate('/scoring')}
           className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors whitespace-nowrap shrink-0"
         >
-          {matchComplete ? 'Home' : 'Back'}
+          Back
         </button>
         <h1 className="text-xl font-bold whitespace-nowrap absolute left-1/2 -translate-x-1/2">Scoresheet</h1>
-        {!matchComplete && (
-          <button
-            onClick={() => navigate('/')}
-            className="ml-auto bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors whitespace-nowrap shrink-0"
-          >
-            Leave
-          </button>
-        )}
+        <button
+          onClick={() => navigate('/')}
+          className="ml-auto bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors whitespace-nowrap shrink-0"
+        >
+          Home
+        </button>
       </div>
 
       {/* Match Header — only shown when match is complete */}
@@ -78,7 +104,17 @@ export default function ScoresheetViewPage() {
             Start Set {currentSetIndex + 2}
           </button>
         )}
-        <ScoresheetPdfDownload fullWidth label="Scoresheet PDF" />
+        {state.scoresheetType === 'cif' ? (
+          <button
+            onClick={handleCifPdf}
+            disabled={cifLoading}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-500 text-white px-4 py-3 rounded-lg text-lg font-bold transition-colors"
+          >
+            {cifLoading ? 'Generating...' : 'CIF Scoresheet PDF'}
+          </button>
+        ) : (
+          <ScoresheetPdfDownload fullWidth label="USAV Scoresheet PDF" />
+        )}
         <button
           onClick={() => navigate('/match-log')}
           className="w-full bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors"

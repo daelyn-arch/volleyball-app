@@ -4,6 +4,7 @@ import type {
   MatchState,
   MatchConfig,
   MatchMetadata,
+  ScoresheetType,
   Team,
   Lineup,
   TeamSide,
@@ -63,7 +64,8 @@ interface SanctionInput {
 
 interface MatchActions {
   // Setup
-  createMatch: (homeTeam: Team, awayTeam: Team, config?: Partial<MatchConfig>, metadata?: Partial<MatchMetadata>) => void;
+  createMatch: (homeTeam: Team, awayTeam: Team, config?: Partial<MatchConfig>, metadata?: Partial<MatchMetadata>, scoresheetType?: ScoresheetType) => void;
+  setScoresheetType: (type: ScoresheetType) => void;
   updateMetadata: (metadata: Partial<MatchMetadata>) => void;
   setLineup: (setIndex: number, team: TeamSide, lineup: Lineup) => void;
   setFirstServe: (setIndex: number, team: TeamSide) => void;
@@ -155,6 +157,7 @@ const initialState: MatchState = {
   homeTeam: { name: '', roster: [] },
   awayTeam: { name: '', roster: [] },
   config: DEFAULT_CONFIG,
+  scoresheetType: 'usav',
   sets: [],
   events: [],
   currentSetIndex: 0,
@@ -170,7 +173,7 @@ export const useMatchStore = create<MatchStore>()(
     (set, get) => ({
       ...initialState,
 
-      createMatch: (homeTeam, awayTeam, config, metadata) => {
+      createMatch: (homeTeam, awayTeam, config, metadata, scoresheetType) => {
         const matchConfig = { ...DEFAULT_CONFIG, ...config };
         const sets: SetData[] = [];
         for (let i = 0; i < matchConfig.bestOf; i++) {
@@ -182,6 +185,7 @@ export const useMatchStore = create<MatchStore>()(
           homeTeam,
           awayTeam,
           config: matchConfig,
+          scoresheetType: scoresheetType ?? get().scoresheetType ?? 'usav',
           sets,
           events: [],
           currentSetIndex: 0,
@@ -191,6 +195,10 @@ export const useMatchStore = create<MatchStore>()(
           remarks: [],
           syncedAt: null,
         });
+      },
+
+      setScoresheetType: (type) => {
+        set({ scoresheetType: type });
       },
 
       updateMetadata: (metadata) => {

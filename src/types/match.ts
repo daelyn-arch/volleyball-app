@@ -140,12 +140,15 @@ export interface MatchConfig {
   maxTimeoutsPerSet: number; // 2 per USAV
 }
 
+export type ScoresheetType = 'usav' | 'cif';
+
 export interface MatchState {
   id: string;
   createdAt: number;
   homeTeam: Team;
   awayTeam: Team;
   config: MatchConfig;
+  scoresheetType: ScoresheetType;
   sets: SetData[];
   events: MatchEvent[];
   currentSetIndex: number;

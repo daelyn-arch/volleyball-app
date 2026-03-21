@@ -60,6 +60,7 @@ export default function SetupPage() {
     const homeTeam: Team = { name: homeName.trim(), roster: [] };
     const awayTeam: Team = { name: awayName.trim(), roster: [] };
 
+    const currentType = useMatchStore.getState().scoresheetType;
     createMatch(homeTeam, awayTeam, { bestOf }, {
       competition: competition.trim(),
       cityState: cityState.trim(),
@@ -75,7 +76,7 @@ export default function SetupPage() {
       downRef: downRef.trim(),
       workTeam: workTeam.trim(),
       region,
-    });
+    }, currentType);
     navigate('/lineup/0');
   }
 
@@ -85,7 +86,7 @@ export default function SetupPage() {
     <div className="min-h-full p-6 max-w-2xl mx-auto">
       <div className="flex items-center mb-6">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/scoresheet-type')}
           className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-lg font-bold transition-colors shrink-0"
         >
           &larr;
@@ -332,12 +333,13 @@ export default function SetupPage() {
       ],
     };
     const store = useMatchStore.getState();
+    const currentType = store.scoresheetType;
     store.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
       competition: 'CCAA Conference', cityState: 'San Marcos, CA',
       hall: 'The Sports Center', matchNumber: '101', level: 'D2',
       division: 'Women', category: 'Adult', poolPhase: 'Pool A',
       court: '1', scorer: 'Jane Smith', referee: 'John Doe', downRef: 'Mike Lee', workTeam: 'WT1', region: 'SC',
-    });
+    }, currentType);
     const homeLineup0: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
     const awayLineup0: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
     store.setLineup(0, 'home', homeLineup0);
@@ -501,6 +503,7 @@ export default function SetupPage() {
     };
 
     const demoStore = useMatchStore.getState();
+    const demoType = demoStore.scoresheetType;
     demoStore.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
       competition: 'CCAA Conference',
       cityState: 'San Marcos, CA',
@@ -516,7 +519,7 @@ export default function SetupPage() {
       downRef: 'Mike Lee',
       workTeam: 'WT1',
       region: 'SC',
-    });
+    }, demoType);
 
     const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
     const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
