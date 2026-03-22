@@ -38,6 +38,7 @@ export interface PointEvent extends BaseEvent {
   serverNumber: number;
   homeScore: number; // score AFTER this point
   awayScore: number;
+  footFault?: boolean; // service fault — shows as boxed R on CIF scoresheet
 }
 
 export interface SubstitutionEvent extends BaseEvent {
@@ -89,13 +90,18 @@ export interface CorrectionEvent extends BaseEvent {
   servingTeam: TeamSide;
 }
 
+export interface ReServeEvent extends BaseEvent {
+  type: 'reServe';
+}
+
 export type MatchEvent =
   | PointEvent
   | SubstitutionEvent
   | TimeoutEvent
   | LiberoReplacementEvent
   | SanctionEvent
-  | CorrectionEvent;
+  | CorrectionEvent
+  | ReServeEvent;
 
 // ── Set ───────────────────────────────────────────────────
 

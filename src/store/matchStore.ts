@@ -81,6 +81,11 @@ interface MatchActions {
   // Timeouts
   recordTimeout: (team: TeamSide) => string | null;
 
+  // Foot fault (CIF: no serve, boxed R)
+  recordFootFault: () => void;
+  // Re-serve (CIF: serve repeated, RS marker in service round)
+  recordReServe: () => void;
+
   // Libero
   recordLiberoReplacement: (
     team: TeamSide,
@@ -198,7 +203,10 @@ export const useMatchStore = create<MatchStore>()(
       },
 
       setScoresheetType: (type) => {
-        set({ scoresheetType: type });
+        set((state) => ({
+          scoresheetType: type,
+          config: { ...state.config, maxSubsPerSet: type === 'cif' ? 18 : 15 },
+        }));
       },
 
       updateMetadata: (metadata) => {
@@ -461,6 +469,48 @@ export const useMatchStore = create<MatchStore>()(
 
         set({ events: [...state.events, event] });
         return null;
+      },
+
+      recordFootFault: () => {
+        const state = get();
+        if (state.matchComplete) return;
+        const setIndex = state.currentSetIndex;
+        const rotation = getCurrentRotation(state, setIndex);
+        if (!rotation) return;
+        const currentScore = getSetScore(state.events, setIndex);
+        if (isSetComplete(currentScore, setIndex, state.config)) return;
+
+        // Foot fault = point to receiving team (sideout)
+        const receivingTeam: TeamSide = rotation.servingTeam === 'home' ? 'away' : 'home';
+        const newHomeScore = currentScore.home + (receivingTeam === 'home' ? 1 : 0);
+        const newAwayScore = currentScore.away + (receivingTeam === 'away' ? 1 : 0);
+
+        const event: MatchEvent = {
+          type: 'point',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex,
+          scoringTeam: receivingTeam,
+          servingTeam: rotation.servingTeam,
+          serverNumber: rotation.serverNumber,
+          homeScore: newHomeScore,
+          awayScore: newAwayScore,
+          footFault: true,
+        };
+
+        set({ events: [...state.events, event] });
+      },
+
+      recordReServe: () => {
+        const state = get();
+        if (state.matchComplete) return;
+        const event: MatchEvent = {
+          type: 'reServe',
+          id: generateId(),
+          timestamp: Date.now(),
+          setIndex: state.currentSetIndex,
+        };
+        set({ events: [...state.events, event] });
       },
 
       recordLiberoReplacement: (team, liberoNumber, replacedPlayer, position, isLiberoEntering) => {
@@ -979,6 +1029,14 @@ export const useMatchStore = create<MatchStore>()(
     }),
     {
       name: 'volleyball-match-storage',
+      version: 1,
+      migrate: (persisted: any) => {
+        // Patch existing CIF matches to have 18 subs
+        if (persisted?.scoresheetType === 'cif' && persisted?.config?.maxSubsPerSet === 15) {
+          persisted.config.maxSubsPerSet = 18;
+        }
+        return persisted;
+      },
     }
   )
 );

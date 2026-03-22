@@ -23,7 +23,7 @@ const POSITIONS: { pos: CourtPosition; label: string }[] = [
 
 export default function OverwriteDialog({ onClose }: Props) {
   const state = useMatchStore();
-  const { homeTeam, awayTeam, events, currentSetIndex, applyCorrection, cancelWrongServerPoints } = state;
+  const { homeTeam, awayTeam, events, currentSetIndex, applyCorrection, cancelWrongServerPoints, recordFootFault, recordReServe } = state;
   const rotation = getCurrentRotation(state, currentSetIndex);
   const score = getSetScore(events, currentSetIndex);
 
@@ -147,6 +147,25 @@ export default function OverwriteDialog({ onClose }: Props) {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Foot Fault & Re-Serve */}
+          <div>
+            <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Service Faults</h3>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { recordFootFault(); onClose(); }}
+                className="flex-1 bg-orange-700/50 hover:bg-orange-600/50 border border-orange-500 text-orange-200 py-2 rounded-lg font-bold text-sm transition-colors"
+              >
+                Foot Fault
+              </button>
+              <button
+                onClick={() => { recordReServe(); onClose(); }}
+                className="flex-1 bg-yellow-700/50 hover:bg-yellow-600/50 border border-yellow-500 text-yellow-200 py-2 rounded-lg font-bold text-sm transition-colors"
+              >
+                Re-Serve
+              </button>
+            </div>
           </div>
 
           {/* Score */}

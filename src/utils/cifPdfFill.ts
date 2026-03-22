@@ -10,8 +10,6 @@ import { getCifSetData, type CifSetData } from '@/store/cifDerived';
 import { getSetScore } from '@/store/derived';
 import { getSetWinner } from '@/utils/scoring';
 
-// ── Shape helpers for service rounds ───────────────────────────
-
 // Service round colors: 1st = black, 2nd = red, 3rd = blue
 const TERM_COLORS = [rgb(0, 0, 0), rgb(0.8, 0, 0), rgb(0, 0, 0.8)];
 
@@ -19,17 +17,19 @@ function getTermColor(termIndex: number) {
   return TERM_COLORS[Math.min(termIndex, TERM_COLORS.length - 1)];
 }
 
-/** Draw text, then a circle around it. Returns total width consumed. */
+// ── Shape helpers for service rounds ───────────────────────────
+
+/** Draw text centered inside a circle. Returns total width consumed. */
 function drawCircledText(
   page: PDFPage, font: PDFFont,
   text: string, x: number, y: number, fontSize: number,
   color = rgb(0, 0, 0),
 ): number {
   const w = font.widthOfTextAtSize(text, fontSize);
-  page.drawText(text, { x, y, size: fontSize, font, color });
-  const cx = x + w / 2;
-  const cy = y + fontSize * 0.3;
   const r = Math.max(w, fontSize) / 2 + 1.5;
+  const cx = x + r;
+  const cy = y + fontSize * 0.3;
+  page.drawText(text, { x: cx - w / 2, y, size: fontSize, font, color });
   page.drawCircle({
     x: cx, y: cy, size: r,
     borderColor: color, borderWidth: 0.75,
@@ -38,19 +38,19 @@ function drawCircledText(
   return r * 2 + 2;
 }
 
-/** Draw text, then a triangle around it. Returns total width consumed. */
+/** Draw text centered inside a triangle. Returns total width consumed. */
 function drawTriangledText(
   page: PDFPage, font: PDFFont,
   text: string, x: number, y: number, fontSize: number,
   color = rgb(0, 0, 0),
 ): number {
   const w = font.widthOfTextAtSize(text, fontSize);
-  page.drawText(text, { x, y, size: fontSize, font, color });
-  const cx = x + w / 2;
-  const cy = y + fontSize * 0.3;
   const dim = Math.max(w, fontSize) + 3;
   const h = dim / 2;
   const halfBase = h * 0.866;
+  const cx = x + halfBase;
+  const cy = y + fontSize * 0.3;
+  page.drawText(text, { x: cx - w / 2, y, size: fontSize, font, color });
   const apex = { x: cx, y: cy + h };
   const bl = { x: cx - halfBase, y: cy - h };
   const br = { x: cx + halfBase, y: cy - h };
@@ -58,6 +58,25 @@ function drawTriangledText(
   page.drawLine({ start: bl, end: br, thickness: 0.75, color });
   page.drawLine({ start: br, end: apex, thickness: 0.75, color });
   return halfBase * 2 + 2;
+}
+
+/** Draw text inside a rectangle/box (for penalties and foot faults). */
+function drawBoxedText(
+  page: PDFPage, font: PDFFont,
+  text: string, x: number, y: number, fontSize: number,
+  color = rgb(0, 0, 0),
+): number {
+  const w = font.widthOfTextAtSize(text, fontSize);
+  const pad = 2;
+  const boxW = w + pad * 2;
+  const boxH = fontSize + pad * 2;
+  page.drawText(text, { x: x + pad, y, size: fontSize, font, color });
+  page.drawRectangle({
+    x, y: y - pad, width: boxW, height: boxH,
+    borderColor: color, borderWidth: 0.75,
+    color: rgb(1, 1, 1), opacity: 0, borderOpacity: 1,
+  });
+  return boxW + 2;
 }
 
 /** Draw plain text. Returns width consumed. */
@@ -68,7 +87,7 @@ function drawPlainText(
 ): number {
   const w = font.widthOfTextAtSize(text, fontSize);
   page.drawText(text, { x, y, size: fontSize, font, color });
-  return w + 2;
+  return w + 5;
 }
 
 /** Draw a diagonal strikethrough line over text */
@@ -80,7 +99,7 @@ function drawStrikethrough(page: PDFPage, x: number, y: number, w: number, fontS
   });
 }
 
-// ── CIF Circle for running score ───────────────────────────────
+// ── Running score shapes ───────────────────────────────────────
 
 function drawCifCircle(
   page: PDFPage,
@@ -128,22 +147,31 @@ function drawCifTriangle(
   page.drawLine({ start: br, end: apex, thickness: 0.75, color });
 }
 
-/** Build map: pointNumber → termIndex for a team (to determine color) */
-function buildPointColorMap(cifData: CifSetData, team: TeamSide): Map<number, number> {
-  const map = new Map<number, number>();
-  const rows = team === 'home' ? cifData.homePositionRows : cifData.awayPositionRows;
-  for (let pos = 1; pos <= 6; pos++) {
-    const terms = rows[pos as CourtPosition];
-    for (let ti = 0; ti < terms.length; ti++) {
-      const term = terms[ti];
-      if (term.sideoutPoint !== null) map.set(term.sideoutPoint, ti);
-      for (const pt of term.servedPoints) map.set(pt, ti);
-    }
-  }
-  return map;
+/** Draw "P" + rectangle around a running score cell (penalty point) */
+function drawCifPenalty(
+  page: PDFPage, font: PDFFont, fontBold: PDFFont,
+  rect: { x: number; y: number; width: number; height: number },
+  color = rgb(0, 0, 0),
+) {
+  const text = 'P';
+  const fontSize = Math.min(rect.width, rect.height) * 0.6 + 2;
+  const tw = fontBold.widthOfTextAtSize(text, fontSize);
+  // Draw bold P to the left of the cell (shifted right 5px)
+  page.drawText(text, {
+    x: rect.x - tw + 4,
+    y: rect.y + (rect.height - fontSize) / 2,
+    size: fontSize, font: fontBold, color,
+  });
+  // Draw rectangle around P + number cell
+  page.drawRectangle({
+    x: rect.x - tw + 3, y: rect.y,
+    width: rect.width + tw - 5, height: rect.height,
+    borderColor: color, borderWidth: 1,
+    color: rgb(1, 1, 1), opacity: 0, borderOpacity: 1,
+  });
 }
 
-/** Draw a circle around a form field by name */
+/** Circle a form field by name */
 function circleField(form: any, page: PDFPage, fieldName: string) {
   const rect = getFieldRect(form, fieldName);
   if (!rect) return;
@@ -153,6 +181,18 @@ function circleField(form: any, page: PDFPage, fieldName: string) {
   page.drawCircle({
     x: cx, y: cy, size: r,
     borderColor: rgb(0, 0, 0), borderWidth: 1,
+    color: rgb(1, 1, 1), opacity: 0, borderOpacity: 1,
+  });
+}
+
+/** Draw a rectangle around a form field by name */
+function rectField(form: any, page: PDFPage, fieldName: string) {
+  const rect = getFieldRect(form, fieldName);
+  if (!rect) return;
+  page.drawRectangle({
+    x: rect.x - 2, y: rect.y - 2,
+    width: rect.width + 4, height: rect.height + 4,
+    borderColor: rgb(0, 0, 0), borderWidth: 1.25,
     color: rgb(1, 1, 1), opacity: 0, borderOpacity: 1,
   });
 }
@@ -180,10 +220,22 @@ function getCifScoreCellRect(
   return { x: col.x, y: col.top - (row + 1) * CIF_CELL_H, width: CIF_CELL_W, height: CIF_CELL_H };
 }
 
+/** Map pointNumber → termIndex for color lookup */
+function buildPointColorMap(cifData: CifSetData, team: TeamSide): Map<number, number> {
+  const map = new Map<number, number>();
+  const rows = team === 'home' ? cifData.homePositionRows : cifData.awayPositionRows;
+  for (let pos = 1; pos <= 6; pos++) {
+    const terms = rows[pos as CourtPosition];
+    for (let ti = 0; ti < terms.length; ti++) {
+      const term = terms[ti];
+      if (term.sideoutPoint !== null) map.set(term.sideoutPoint, ti);
+      for (const pt of term.servedPoints) map.set(pt, ti);
+    }
+  }
+  return map;
+}
+
 // ── Service Terms (CIF convention) ─────────────────────────────
-// Each served point → circled number
-// End of service → circled R (or triangled R if libero)
-// Inline events → T/Tx (timeout), S/Sx (sub)
 
 function fillServiceTerms(
   form: any, page: PDFPage, font: PDFFont,
@@ -191,6 +243,7 @@ function fillServiceTerms(
 ) {
   const side = team === 'home' ? 'left' : 'right';
   const rows = team === 'home' ? cifData.homePositionRows : cifData.awayPositionRows;
+  const penaltyPts = team === 'home' ? cifData.homePenaltyPoints : cifData.awayPenaltyPoints;
   const fontSize = 7;
 
   for (let pos = 1; pos <= 6; pos++) {
@@ -203,64 +256,131 @@ function fillServiceTerms(
     const upperY = rect.y + rect.height * 0.62;
     const lowerY = rect.y + rect.height * 0.18;
     const rightEdge = rect.x + rect.width - 2;
+    const leftEdge = rect.x + 3;
 
-    let x = rect.x + 3;
+    let x = leftEdge;
     let y = upperY;
+    let full = false;
 
-    const advance = (w: number) => {
-      x += w;
-      if (x > rightEdge && y === upperY) {
-        x = rect.x + 3;
+    const canFit = (w: number): boolean => {
+      if (full) return false;
+      if (x + w <= rightEdge) return true;
+      if (y === upperY) {
+        x = leftEdge;
         y = lowerY;
+        return x + w <= rightEdge;
       }
+      full = true;
+      return false;
     };
 
-    for (let ti = 0; ti < terms.length; ti++) {
+    for (let ti = 0; ti < terms.length && !full; ti++) {
       const term = terms[ti];
-      const color = getTermColor(ti); // black → red → blue
+      const color = getTermColor(ti);
 
-      // Draw sideout point (not circled — gained while receiving)
-      if (term.sideoutPoint !== null) {
-        const w = drawPlainText(page, font, String(term.sideoutPoint), x, y, fontSize, color);
-        advance(w);
+      // Sideout point (not circled)
+      if (term.sideoutPoint !== null && !full) {
+        const text = String(term.sideoutPoint);
+        const w = font.widthOfTextAtSize(text, fontSize) + 5;
+        if (canFit(w)) {
+          drawPlainText(page, font, text, x, y, fontSize, color);
+          x += w;
+        }
       }
 
-      // Draw each served point number with circle
+      // Served points: circled, or boxed P{n} for penalties
       for (const pt of term.servedPoints) {
-        const w = drawCircledText(page, font, String(pt), x, y, fontSize, color);
-        advance(w);
+        if (full) break;
+        if (penaltyPts.has(pt)) {
+          // Penalty point → boxed "P{n}"
+          const text = `P${pt}`;
+          const tw = font.widthOfTextAtSize(text, fontSize);
+          const w = tw + 6; // box padding
+          if (canFit(w)) {
+            drawBoxedText(page, font, text, x, y, fontSize, color);
+            x += w;
+          }
+        } else if (term.isLibero) {
+          // Libero served point → triangled
+          const text = String(pt);
+          const tw = font.widthOfTextAtSize(text, fontSize);
+          const dim = Math.max(tw, fontSize) + 3;
+          const halfBase = (dim / 2) * 0.866;
+          const w = halfBase * 2 + 2;
+          if (canFit(w)) {
+            drawTriangledText(page, font, text, x, y, fontSize, color);
+            x += w;
+          }
+        } else {
+          // Normal served point → circled
+          const text = String(pt);
+          const tw = font.widthOfTextAtSize(text, fontSize);
+          const r = Math.max(tw, fontSize) / 2 + 1.5;
+          const w = r * 2 + 2;
+          if (canFit(w)) {
+            drawCircledText(page, font, text, x, y, fontSize, color);
+            x += w;
+          }
+        }
       }
 
-      // Draw inline events (T/Tx for timeouts, S/Sx #in/#out for subs)
+      // Inline events (T/Tx, S/Sx, RS)
       for (const evt of term.inlineEvents) {
+        if (full) break;
         let label = '';
         if (evt.type === 'timeout') {
           label = evt.forServingTeam ? 'T' : 'Tx';
         } else if (evt.type === 'sub') {
-          const prefix = evt.forServingTeam ? 'S' : 'Sx';
-          label = `${prefix} ${evt.detail}`;
+          label = `${evt.forServingTeam ? 'S' : 'Sx'} ${evt.detail}`;
+        } else if (evt.type === 'reServe') {
+          label = 'RS';
         }
         if (label) {
-          const w = drawPlainText(page, font, label, x, y, fontSize, color);
-          advance(w);
+          const w = font.widthOfTextAtSize(label, fontSize) + 5;
+          if (canFit(w)) {
+            drawPlainText(page, font, label, x, y, fontSize, color);
+            x += w;
+          }
         }
       }
 
-      // Draw R at end of service (if service ended)
-      if (term.exitScore !== null) {
-        if (term.isLibero) {
-          const w = drawTriangledText(page, font, 'R', x, y, fontSize, color);
-          advance(w);
+      // R at end of service
+      if (term.exitScore !== null && !full) {
+        const rText = 'R';
+        if (term.wasFootFault) {
+          // Foot fault → boxed R
+          const tw = font.widthOfTextAtSize(rText, fontSize);
+          const w = tw + 6;
+          if (canFit(w)) {
+            drawBoxedText(page, font, rText, x, y, fontSize, color);
+            x += w;
+          }
+        } else if (term.isLibero) {
+          // Libero → triangled R
+          const tw = font.widthOfTextAtSize(rText, fontSize);
+          const dim = Math.max(tw, fontSize) + 3;
+          const halfBase = (dim / 2) * 0.866;
+          const w = halfBase * 2 + 2;
+          if (canFit(w)) {
+            drawTriangledText(page, font, rText, x, y, fontSize, color);
+            x += w;
+          }
         } else {
-          const w = drawCircledText(page, font, 'R', x, y, fontSize, color);
-          advance(w);
+          // Normal → circled R
+          const tw = font.widthOfTextAtSize(rText, fontSize);
+          const r = Math.max(tw, fontSize) / 2 + 1.5;
+          const w = r * 2 + 2;
+          if (canFit(w)) {
+            drawCircledText(page, font, rText, x, y, fontSize, color);
+            x += w;
+          }
         }
       }
     }
   }
 }
 
-// ── Lineup + Subs in pos fields ────────────────────────────────
+// ── Lineup + Subs ──────────────────────────────────────────────
 
 function drawLineupAndSubs(
   form: any, page: PDFPage, font: PDFFont,
@@ -282,50 +402,43 @@ function drawLineupAndSubs(
     const baseY = rect.y + rect.height * 0.62;
     let x = rect.x + 3;
 
-    // Draw starting player number
     const tw = font.widthOfTextAtSize(text, fontSize);
     page.drawText(text, { x, y: baseY, size: fontSize, font, color: rgb(0, 0, 0) });
 
-    // Check if this player was subbed out
     const sub = subs.find(s => s.playerOut === startingPlayer);
     if (sub) {
-      // Strikethrough the original number
       drawStrikethrough(page, x, baseY, tw, fontSize);
-      // Draw the sub player number next to it
       x += tw + 3;
       page.drawText(String(sub.playerIn), { x, y: baseY, size: fontSize, font, color: rgb(0, 0, 0) });
     }
   }
 }
 
-// ── Libero triangle on Roman numerals ──────────────────────────
+// ── Libero triangles on Roman numerals ─────────────────────────
+// Returns rects to draw AFTER flatten (so fields don't cover them)
 
-function drawLiberoTriangles(
-  form: any, page: PDFPage,
-  cifData: CifSetData, team: TeamSide,
-) {
+function getLiberoTriangleRects(
+  form: any, cifData: CifSetData, team: TeamSide,
+): Array<{ x: number; y: number; width: number; height: number }> {
   const side = team === 'home' ? 'left' : 'right';
   const rows = team === 'home' ? cifData.homePositionRows : cifData.awayPositionRows;
   const posRoman = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+  const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
 
   for (let pos = 1; pos <= 6; pos++) {
     const terms = rows[pos as CourtPosition];
-    const hadLiberoServe = terms.some(t => t.isLibero);
-    if (!hadLiberoServe) continue;
-
-    const fieldName = `${side} team ${posRoman[pos - 1]}`;
-    const rect = getFieldRect(form, fieldName);
-    if (!rect) continue;
-    drawTriangleOnPage(page, rect);
+    if (!terms.some(t => t.isLibero)) continue;
+    const rect = getFieldRect(form, `${side} team ${posRoman[pos - 1]}`);
+    if (rect) rects.push(rect);
   }
+  return rects;
 }
 
 // ── Running Score Drawing ──────────────────────────────────────
 
 function drawRunningScore(
-  page: PDFPage, state: MatchState, cifData: CifSetData, _setIndex: number,
+  page: PDFPage, font: PDFFont, fontBold: PDFFont, state: MatchState, cifData: CifSetData,
 ) {
-  // Build color maps for both teams
   const homeColorMap = buildPointColorMap(cifData, 'home');
   const awayColorMap = buildPointColorMap(cifData, 'away');
 
@@ -337,7 +450,11 @@ function drawRunningScore(
     const ti = colorMap.get(pt.pointNumber) ?? 0;
     const color = getTermColor(ti);
 
-    if (pt.wasLiberoServing && pt.wasServedPoint) {
+    // Penalty point → P + rectangle (no circle/slash)
+    const penaltyPts = pt.scoringTeam === 'home' ? cifData.homePenaltyPoints : cifData.awayPenaltyPoints;
+    if (penaltyPts.has(pt.pointNumber)) {
+      drawCifPenalty(page, font, fontBold, rect, color);
+    } else if (pt.wasLiberoServing && pt.wasServedPoint) {
       drawCifTriangle(page, rect, color);
     } else if (pt.wasServedPoint) {
       drawCifCircle(page, rect, color);
@@ -352,12 +469,13 @@ function drawRunningScore(
 async function fillCifSetPage(
   doc: PDFDocument, form: any, page: PDFPage,
   state: MatchState, setIndex: number,
-) {
+): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
   const cifData = getCifSetData(state, setIndex);
   const setData = state.sets[setIndex];
-  if (!setData) return;
+  if (!setData) return [];
 
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
   // ── Team names ──
   safeSetField(form, 'team left', state.homeTeam.name);
@@ -383,12 +501,12 @@ async function fillCifSetPage(
     safeSetField(form, 'finish time', `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`);
   }
 
-  // ── Level (circle the matching field) ──
+  // ── Level ──
   if (state.metadata?.level) {
     const lvl = state.metadata.level.toLowerCase();
-    if (lvl.includes('varsity') && !lvl.includes('junior')) circleField(form, page, 'varsity');
-    else if (lvl.includes('jv') || lvl.includes('junior')) circleField(form, page, 'jv');
-    else if (lvl.includes('frosh') || lvl.includes('soph')) circleField(form, page, 'frosh/soph');
+    if (lvl.includes('varsity') && !lvl.includes('junior')) rectField(form, page, 'varsity');
+    else if (lvl.includes('jv') || lvl.includes('junior')) rectField(form, page, 'jv');
+    else if (lvl.includes('frosh') || lvl.includes('soph')) rectField(form, page, 'frosh/soph');
   }
 
   // ── Set number ──
@@ -406,20 +524,22 @@ async function fillCifSetPage(
   if (homeLiberos.length > 0) safeSetField(form, 'left libero', homeLiberos.map(l => l.number).join(', '), TextAlignment.Center);
   if (awayLiberos.length > 0) safeSetField(form, 'right libero', awayLiberos.map(l => l.number).join(', '), TextAlignment.Center);
 
-  // ── Lineup + subs in pos fields ──
+  // ── Lineup + subs ──
   drawLineupAndSubs(form, page, font, cifData, 'home');
   drawLineupAndSubs(form, page, font, cifData, 'away');
 
-  // ── Libero triangles on Roman numerals ──
-  drawLiberoTriangles(form, page, cifData, 'home');
-  drawLiberoTriangles(form, page, cifData, 'away');
+  // ── Collect libero triangle rects (drawn AFTER flatten) ──
+  const liberoTriangleRects = [
+    ...getLiberoTriangleRects(form, cifData, 'home'),
+    ...getLiberoTriangleRects(form, cifData, 'away'),
+  ];
 
-  // ── Service terms (circled points, R markers, inline events) ──
+  // ── Service terms ──
   fillServiceTerms(form, page, font, cifData, 'home');
   fillServiceTerms(form, page, font, cifData, 'away');
 
   // ── Running score ──
-  drawRunningScore(page, state, cifData, setIndex);
+  drawRunningScore(page, font, fontBold, state, cifData);
 
   // ── Timeouts ──
   for (const to of cifData.homeTimeouts) safeSetField(form, `timeout ${to.timeoutNumber} left`, `${to.homeScore}-${to.awayScore}`, TextAlignment.Center);
@@ -438,6 +558,41 @@ async function fillCifSetPage(
     safeSetField(form, 'winning team score', String(winner === 'home' ? score.home : score.away), TextAlignment.Center);
     safeSetField(form, 'losing team score', String(winner === 'home' ? score.away : score.home), TextAlignment.Center);
   }
+
+  // ── Comments / Remarks ──
+  const remarks: string[] = state.remarks ? [...state.remarks] : [];
+  const sanctionLabels: Record<string, string> = {
+    warning: 'Warning', penalty: 'Penalty',
+    'delay-warning': 'Delay Warning', 'delay-penalty': 'Delay Penalty',
+    expulsion: 'Expulsion', disqualification: 'Disqualification',
+  };
+  const recipientLabels: Record<string, string> = {
+    player: 'Player', coach: 'Coach', asstCoach: 'Asst Coach', trainer: 'Trainer', manager: 'Manager',
+  };
+  const sanctionEvents = state.events.filter(
+    (e): e is import('@/types/match').SanctionEvent => e.type === 'sanction' && e.setIndex === setIndex
+  );
+  for (const e of sanctionEvents) {
+    const teamName = e.team === 'home' ? state.homeTeam.name : state.awayTeam.name;
+    const label = sanctionLabels[e.sanctionType] || e.sanctionType;
+    const recipient = e.sanctionRecipient ? recipientLabels[e.sanctionRecipient] || '' : '';
+    const playerStr = e.playerNumber ? ` #${e.playerNumber}` : '';
+    remarks.push(`Set ${setIndex + 1} (${e.homeScore}:${e.awayScore}): ${label} - ${teamName}${recipient ? ' ' + recipient : ''}${playerStr}`);
+  }
+  if (remarks.length > 0) {
+    try {
+      const commentsField = form.getTextField('comments');
+      commentsField.enableMultiline();
+      commentsField.setAlignment(TextAlignment.Left);
+      commentsField.setFontSize(6);
+      // Shift down + tabs to push past the "COMMENTS:" header
+      commentsField.setText(' \n\t\t\t\t\t\t\t\t\t\t\t' + remarks.join('\n'));
+    } catch {
+      safeSetField(form, 'comments', ' \n\t\t\t\t\t\t\t\t\t\t\t' + remarks.join('\n'), TextAlignment.Left, 6);
+    }
+  }
+
+  return liberoTriangleRects;
 }
 
 // ── Main Fill Function ─────────────────────────────────────────
@@ -452,8 +607,16 @@ export async function fillCifScoresheet(
     const setDoc = await PDFDocument.load(templateBytes);
     const form = setDoc.getForm();
     const page = setDoc.getPages()[0];
-    await fillCifSetPage(setDoc, form, page, state, si);
+
+    const liberoRects = await fillCifSetPage(setDoc, form, page, state, si);
+
     if (flatten) form.flatten();
+
+    // Draw libero triangles AFTER flatten so field backgrounds don't cover them
+    for (const rect of liberoRects) {
+      drawTriangleOnPage(page, rect);
+    }
+
     const [copiedPage] = await output.copyPages(setDoc, [0]);
     output.addPage(copiedPage);
   }

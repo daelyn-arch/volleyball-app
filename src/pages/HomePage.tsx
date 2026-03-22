@@ -136,7 +136,7 @@ export default function HomePage() {
         PDF: {pdfStyle === 'official' ? 'Official Template' : 'Custom Scoresheet'}
       </button>
 
-      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.16</span>
+      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.34</span>
     </div>
   );
 }

@@ -312,7 +312,7 @@ function SubsTimeouts({ substitutions, timeouts, maxSubs, side }: {
       </View>
       <Text style={s.sectionLabel}>SUBS ({substitutions.length}/{maxSubs})</Text>
       <View style={s.subsGrid}>
-        {Array.from({ length: Math.min(maxSubs, 15) }, (_, i) => {
+        {Array.from({ length: Math.min(maxSubs, 18) }, (_, i) => {
           const sub = substitutions[i];
           return (
             <View key={i} style={[s.subBox, isAway ? s.subBoxAway : {}, sub ? s.subBoxFilled : {}]}>

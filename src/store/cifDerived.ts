@@ -27,7 +27,8 @@ export interface CifServiceTerm {
   sideoutPoint: number | null; // point scored via sideout that gained serve (not circled)
   servedPoints: number[];
   exitScore: number | null;
-  inlineEvents: Array<{ type: 'sub' | 'timeout'; forServingTeam: boolean; detail: string }>;
+  wasFootFault: boolean; // term ended due to foot fault → boxed R
+  inlineEvents: Array<{ type: 'sub' | 'timeout' | 'reServe'; forServingTeam: boolean; detail: string }>;
 }
 
 export interface CifSetData {
@@ -41,6 +42,8 @@ export interface CifSetData {
   awaySubstitutions: SubstitutionRecord[];
   homeTimeouts: TimeoutRecord[];
   awayTimeouts: TimeoutRecord[];
+  homePenaltyPoints: Set<number>; // point numbers awarded via penalty → boxed P{n}
+  awayPenaltyPoints: Set<number>;
 }
 
 function emptyRows(): Record<CourtPosition, CifServiceTerm[]> {
@@ -62,6 +65,8 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
     awaySubstitutions: getSubstitutions(state.events, setIndex, 'away'),
     homeTimeouts: getTimeouts(state.events, setIndex, 'home'),
     awayTimeouts: getTimeouts(state.events, setIndex, 'away'),
+    homePenaltyPoints: new Set<number>(),
+    awayPenaltyPoints: new Set<number>(),
   };
 
   if (!setData?.homeLineup || !setData?.awayLineup || !setData.firstServe) {
@@ -99,6 +104,7 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
       sideoutPoint: null,
       servedPoints: [],
       exitScore: null,
+      wasFootFault: false,
       inlineEvents: [],
     };
   }
@@ -106,6 +112,27 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
   function pushTerm(term: CifServiceTerm, team: TeamSide) {
     const rows = team === 'home' ? result.homePositionRows : result.awayPositionRows;
     rows[term.rotationSlot].push(term);
+  }
+
+  // Pre-scan: find penalty points (sanction followed by point)
+  for (let i = 0; i < setEvents.length - 1; i++) {
+    const e = setEvents[i];
+    const next = setEvents[i + 1];
+    if (e.type === 'sanction' && next.type === 'point' &&
+        (e.sanctionType === 'penalty' || e.sanctionType === 'delay-penalty' ||
+         e.sanctionType === 'expulsion' || e.sanctionType === 'disqualification')) {
+      // Compute the point number for the scoring team
+      let hc = 0, ac = 0;
+      for (let j = 0; j <= i + 1; j++) {
+        const ev = setEvents[j];
+        if (ev.type === 'point') {
+          if (ev.scoringTeam === 'home') hc++;
+          else ac++;
+        }
+      }
+      if (next.scoringTeam === 'home') result.homePenaltyPoints.add(hc);
+      else result.awayPenaltyPoints.add(ac);
+    }
   }
 
   // Start initial service term if there are any events
@@ -121,6 +148,7 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
         // Exit score = opponent's score after sideout point
         if (tracker.term && tracker.team) {
           tracker.term.exitScore = event.scoringTeam === 'home' ? event.homeScore : event.awayScore;
+          if (event.footFault) tracker.term.wasFootFault = true;
           pushTerm(tracker.term, tracker.team);
         }
 
@@ -185,6 +213,15 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
         });
       }
 
+    } else if (event.type === 'reServe') {
+      if (tracker.term && tracker.team) {
+        tracker.term.inlineEvents.push({
+          type: 'reServe',
+          forServingTeam: true,
+          detail: 'RS',
+        });
+      }
+
     } else if (event.type === 'liberoReplacement') {
       const lineup = event.team === 'home' ? homeLineup : awayLineup;
       if (event.isLiberoEntering) {
@@ -194,6 +231,12 @@ export function getCifSetData(state: MatchState, setIndex: number): CifSetData {
       }
       if (event.team === 'home') homeLineup = { ...lineup };
       else awayLineup = { ...lineup };
+
+      // If libero enters/exits at serving position during active term, update isLibero
+      if (event.position === 1 && tracker.term && tracker.team === event.team) {
+        const libNums = event.team === 'home' ? homeLiberoNums : awayLiberoNums;
+        tracker.term.isLibero = libNums.has(getServer(event.team === 'home' ? homeLineup : awayLineup));
+      }
 
     } else if (event.type === 'correction') {
       homeLineup = { ...event.homeLineup };

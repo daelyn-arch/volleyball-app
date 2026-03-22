@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
-import type { Team, MatchMetadata, Lineup, TeamSide } from '@/types/match';
+import type { Team, MatchMetadata, Lineup, TeamSide, CourtPosition } from '@/types/match';
 
 const USAV_REGIONS = [
   { code: 'AH', name: 'Aloha' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
@@ -313,13 +313,16 @@ export default function SetupPage() {
   );
 
   function handleRandomGame() {
-    // Set up the demo match inline (don't call handleDemo which navigates)
+    // Large rosters to support 18 subs: 6 starters + 12 bench + 1 libero = 19 per team
     const homeTeam: Team = {
       name: 'CSUSM',
       roster: [
         { number: 1, isCaptain: true }, { number: 2 }, { number: 3 },
         { number: 4 }, { number: 5 }, { number: 6 },
         { number: 7 }, { number: 8 }, { number: 9 },
+        { number: 21 }, { number: 22 }, { number: 23 },
+        { number: 24 }, { number: 25 }, { number: 26 },
+        { number: 27 }, { number: 28 }, { number: 29 },
         { number: 10, isLibero: true },
       ],
     };
@@ -329,6 +332,9 @@ export default function SetupPage() {
         { number: 11, isCaptain: true }, { number: 12 }, { number: 13 },
         { number: 14 }, { number: 15 }, { number: 16 },
         { number: 17 }, { number: 18 }, { number: 19 },
+        { number: 31 }, { number: 32 }, { number: 33 },
+        { number: 34 }, { number: 35 }, { number: 36 },
+        { number: 37 }, { number: 38 }, { number: 39 },
         { number: 20, isLibero: true },
       ],
     };
@@ -336,136 +342,141 @@ export default function SetupPage() {
     const currentType = store.scoresheetType;
     store.createMatch(homeTeam, awayTeam, { bestOf: 3 }, {
       competition: 'CCAA Conference', cityState: 'San Marcos, CA',
-      hall: 'The Sports Center', matchNumber: '101', level: 'D2',
+      hall: 'The Sports Center', matchNumber: '101', level: 'Varsity',
       division: 'Women', category: 'Adult', poolPhase: 'Pool A',
       court: '1', scorer: 'Jane Smith', referee: 'John Doe', downRef: 'Mike Lee', workTeam: 'WT1', region: 'SC',
     }, currentType);
-    const homeLineup0: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
-    const awayLineup0: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
-    store.setLineup(0, 'home', homeLineup0);
-    store.setLineup(0, 'away', awayLineup0);
-    store.setFirstServe(0, 'home');
 
-    // Now simulate random gameplay
-    const bestOf = 3;
-    const setsToPlay = Math.random() < 0.5 ? 2 : 3; // 2 sets (sweep) or 3 sets
+    // Always play 3 sets to exercise everything
+    const setsToPlay = 3;
 
     for (let setNum = 0; setNum < setsToPlay; setNum++) {
+      const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
+      const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
       if (setNum > 0) {
-        // Advance to next set and set lineups
         store.advanceToNextSet();
-        const homeLineup: Lineup = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 };
-        const awayLineup: Lineup = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 15, 6: 16 };
-        store.setLineup(setNum, 'home', homeLineup);
-        store.setLineup(setNum, 'away', awayLineup);
-        store.setFirstServe(setNum, setNum % 2 === 0 ? 'home' : 'away');
       }
+      store.setLineup(setNum, 'home', homeLineup);
+      store.setLineup(setNum, 'away', awayLineup);
+      store.setFirstServe(setNum, setNum % 2 === 0 ? 'home' : 'away');
 
-      // Determine target scores for this set
       const isDeciding = setNum === 2;
       const maxPts = isDeciding ? 15 : 25;
+      // Alternate winners: home wins set 0, away wins set 1, random set 2
       let homeTarget: number, awayTarget: number;
-
-      if (setNum < 2) {
-        // First two sets: alternate winner or random
-        const homeWins = setNum === 0 ? Math.random() < 0.6 : (setsToPlay === 3 ? !true : Math.random() < 0.6);
-        if (setsToPlay === 2) {
-          // Sweep: same team wins both
-          homeTarget = maxPts;
-          awayTarget = Math.floor(Math.random() * 10) + 15; // 15-24
-        } else {
-          // 3 sets: each team wins one of the first two
-          if (setNum === 0) {
-            homeTarget = maxPts;
-            awayTarget = Math.floor(Math.random() * 10) + 15;
-          } else {
-            awayTarget = maxPts;
-            homeTarget = Math.floor(Math.random() * 10) + 15;
-          }
-        }
+      if (setNum === 0) {
+        homeTarget = maxPts; awayTarget = Math.floor(Math.random() * 8) + 15;
+      } else if (setNum === 1) {
+        awayTarget = maxPts; homeTarget = Math.floor(Math.random() * 8) + 15;
       } else {
-        // Deciding set
-        const homeWinsDecider = Math.random() < 0.5;
-        if (homeWinsDecider) {
-          homeTarget = maxPts;
-          awayTarget = Math.floor(Math.random() * 5) + 10; // 10-14
-        } else {
-          awayTarget = maxPts;
-          homeTarget = Math.floor(Math.random() * 5) + 10;
-        }
+        homeTarget = maxPts; awayTarget = Math.floor(Math.random() * 4) + 10;
       }
-
-      // Ensure at least 2-point lead if close
-      if (Math.abs(homeTarget - awayTarget) < 2 && (homeTarget >= maxPts || awayTarget >= maxPts)) {
+      if (Math.abs(homeTarget - awayTarget) < 2) {
         if (homeTarget > awayTarget) awayTarget = homeTarget - 2;
         else homeTarget = awayTarget - 2;
       }
 
-      // Simulate points in random order, with occasional subs/timeouts
-      const totalPoints = homeTarget + awayTarget;
-      let homeScored = 0;
-      let awayScored = 0;
-      const subsDone: Record<string, number> = { home: 0, away: 0 };
-      const tosDone: Record<string, number> = { home: 0, away: 0 };
-
-      // Create a shuffled sequence of which team scores each point
+      // Build point sequence: winner scores last
       const sequence: TeamSide[] = [];
       for (let i = 0; i < homeTarget; i++) sequence.push('home');
       for (let i = 0; i < awayTarget; i++) sequence.push('away');
-      // Shuffle all but the last point (winner must score last)
-      const lastPoint = sequence[sequence.length - 1];
+      const lastPt = sequence[sequence.length - 1];
       const rest = sequence.slice(0, -1);
       for (let i = rest.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [rest[i], rest[j]] = [rest[j], rest[i]];
       }
-      rest.push(lastPoint);
+      rest.push(lastPt);
 
-      const sanctionsDone: Record<string, number> = { home: 0, away: 0 };
-      const sanctionTypes: Array<'warning' | 'penalty' | 'delay-warning' | 'delay-penalty'> = ['warning', 'penalty', 'delay-warning', 'delay-penalty'];
-      const sanctionRecipients: Array<'player' | 'coach' | 'asstCoach'> = ['player', 'player', 'player', 'coach', 'asstCoach'];
+      // Track state for scheduling events
+      const tosDone = { home: 0, away: 0 };
+      const sanctionsDone = { home: 0, away: 0 };
+      let footFaultDone = false;
+      let penaltyDone = false;
+      let reServeDone = false;
+      let pointNum = 0;
 
+      // Put libero at position 1 BEFORE any points so they actually serve
+      if (setNum === 0) {
+        store.recordLiberoReplacement('home', 10, 1, 1 as CourtPosition, true);
+      }
+
+      // Sub plan: cycle through bench players. 6 starters sub out, bench subs in,
+      // then reverse. That gives 12 subs per cycle. Do 1.5 cycles = 18 subs.
+      // Home bench: 7,8,9,21,22,23,24,25,26,27,28,29
+      // Away bench: 17,18,19,31,32,33,34,35,36,37,38,39
+      const homeSubPairs: [number, number][] = [
+        [7, 3], [8, 4], [9, 5], [21, 6], [22, 1], [23, 2],  // 6 subs in
+        [3, 7], [4, 8], [5, 9], [6, 21], [1, 22], [2, 23],  // 6 subs back
+        [24, 3], [25, 4], [26, 5], [27, 6], [28, 1], [29, 2], // 6 more
+      ];
+      const awaySubPairs: [number, number][] = [
+        [17, 13], [18, 14], [19, 15], [31, 16], [32, 11], [33, 12],
+        [13, 17], [14, 18], [15, 19], [16, 31], [11, 32], [12, 33],
+        [34, 13], [35, 14], [36, 15], [37, 16], [38, 11], [39, 12],
+      ];
+      let homeSubIdx = 0;
+      let awaySubIdx = 0;
+
+      // Schedule subs at every 2 points to fit 18 each within ~36-50 points
       for (const team of rest) {
-        // Random timeout (~5% chance, max 2 per team)
-        const toTeam: TeamSide = Math.random() < 0.5 ? 'home' : 'away';
-        if (Math.random() < 0.05 && tosDone[toTeam] < 2) {
-          store.recordTimeout(toTeam);
-          tosDone[toTeam]++;
+        pointNum++;
+
+        // ── Timeouts at specific points ──
+        if (pointNum === 6 && tosDone.away < 2) { store.recordTimeout('away'); tosDone.away++; }
+        if (pointNum === 10 && tosDone.home < 2) { store.recordTimeout('home'); tosDone.home++; }
+        if (pointNum === 18 && tosDone.home < 2) { store.recordTimeout('home'); tosDone.home++; }
+        if (pointNum === 22 && tosDone.away < 2) { store.recordTimeout('away'); tosDone.away++; }
+
+        // ── Substitutions: one every ~2 points, alternating teams ──
+        if (pointNum % 2 === 0 && homeSubIdx < homeSubPairs.length) {
+          const [pin, pout] = homeSubPairs[homeSubIdx];
+          store.recordSubstitution('home', pin, pout);
+          homeSubIdx++;
+        }
+        if (pointNum % 2 === 1 && pointNum > 1 && awaySubIdx < awaySubPairs.length) {
+          const [pin, pout] = awaySubPairs[awaySubIdx];
+          store.recordSubstitution('away', pin, pout);
+          awaySubIdx++;
         }
 
-        // Random substitution (~8% chance, max a few per set)
-        if (Math.random() < 0.08 && subsDone.home < 4) {
-          const benchPlayers = [7, 8, 9];
-          const available = benchPlayers.filter(n => {
-            // Check not already on court by just trying
-            return true;
-          });
-          if (available.length > 0) {
-            const pin = available[Math.floor(Math.random() * available.length)];
-            const courtPlayers = [1, 2, 3, 4, 5, 6];
-            const pout = courtPlayers[Math.floor(Math.random() * courtPlayers.length)];
-            store.recordSubstitution('home', pin, pout);
-            subsDone.home++;
-          }
+        // ── Penalty at point 15 ──
+        if (pointNum === 15 && !penaltyDone) {
+          const penaltyTeam: TeamSide = team === 'home' ? 'away' : 'home';
+          store.recordSanction(penaltyTeam, 'penalty', penaltyTeam === 'home' ? 3 : 13, 'player');
+          penaltyDone = true;
         }
 
-        // Random sanction (~3% chance, max 2 per team per set)
-        const sanctionTeam: TeamSide = Math.random() < 0.5 ? 'home' : 'away';
-        if (Math.random() < 0.03 && sanctionsDone[sanctionTeam] < 2) {
-          const sType = sanctionTypes[Math.floor(Math.random() * sanctionTypes.length)];
-          // Warnings and penalties always target a player
-          const isPlayerSanction = sType === 'warning' || sType === 'penalty';
-          const recipient = isPlayerSanction ? 'player' : sanctionRecipients[Math.floor(Math.random() * sanctionRecipients.length)];
-          const playerNum = recipient === 'player'
-            ? (sanctionTeam === 'home' ? Math.floor(Math.random() * 6) + 1 : Math.floor(Math.random() * 6) + 11)
-            : undefined;
-          store.recordSanction(sanctionTeam, sType, playerNum, recipient);
-          sanctionsDone[sanctionTeam]++;
+        // ── Foot fault at point 20 (set 0 only) ──
+        if (pointNum === 20 && setNum === 0 && !footFaultDone) {
+          store.recordFootFault();
+          footFaultDone = true;
+          continue;
+        }
+
+        // ── Re-serve at point 12 (set 0 only) ──
+        if (pointNum === 12 && setNum === 0 && !reServeDone) {
+          store.recordReServe();
+          reServeDone = true;
+        }
+
+        // ── Warning ──
+        if (pointNum === 25 && sanctionsDone.home < 2) {
+          store.recordSanction('home', 'warning', 1, 'player');
+          sanctionsDone.home++;
+        }
+        // ── Delay warning ──
+        if (pointNum === 30 && sanctionsDone.away < 2) {
+          store.recordSanction('away', 'delay-warning');
+          sanctionsDone.away++;
         }
 
         store.awardPoint(team);
       }
     }
+
+    // ── Populate remarks ──
+    store.addRemark('Demo game with all CIF scenarios: libero serving, penalties, foot faults, subs, timeouts.');
 
     navigate('/scoring');
   }
