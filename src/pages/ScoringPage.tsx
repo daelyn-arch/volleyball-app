@@ -599,12 +599,12 @@ function TeamPanel({
       )}
 
       {/* Point Buttons */}
-      <div data-name={`${side}-point-buttons`} className={`flex flex-1 ${setComplete || pointsBlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+      <div data-name={`${side}-point-buttons`} className={`flex portrait:flex-col flex-1 ${setComplete || pointsBlocked ? 'opacity-40 pointer-events-none' : ''}`}>
         <button
           data-name={`${side}-plus-btn`}
           onClick={onPoint}
           disabled={setComplete || pointsBlocked}
-          className={`flex-1 ${pointBg} text-white text-2xl font-bold py-2 rounded-l-lg transition-colors active:scale-95 touch-manipulation`}
+          className={`flex-1 ${pointBg} text-white text-2xl font-bold py-2 rounded-l-lg portrait:rounded-l-none portrait:rounded-t-lg transition-colors active:scale-95 touch-manipulation`}
         >
           +
         </button>
@@ -612,7 +612,7 @@ function TeamPanel({
           data-name={`${side}-minus-btn`}
           onClick={onDecrement}
           disabled={setComplete || pointsBlocked}
-          className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-2 rounded-r-lg transition-colors active:scale-95 touch-manipulation"
+          className="flex-1 bg-slate-600 hover:bg-slate-500 active:bg-slate-400 text-white text-2xl font-bold py-2 rounded-r-lg portrait:rounded-r-none portrait:rounded-b-lg transition-colors active:scale-95 touch-manipulation"
         >
           −
         </button>

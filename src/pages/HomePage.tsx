@@ -91,7 +91,7 @@ export default function HomePage() {
             resetMatch();
             navigate('/scoresheet-type');
           }}
-          className="bg-blue-700 hover:bg-blue-600 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
+          className="bg-slate-800 hover:bg-slate-700 border border-blue-500 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
         >
           New Match
         </button>
@@ -116,7 +116,7 @@ export default function HomePage() {
         PDF: {pdfStyle === 'official' ? 'Official Template' : 'Custom Scoresheet'}
       </button>
 
-      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.42</span>
+      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.43</span>
     </div>
   );
 }
