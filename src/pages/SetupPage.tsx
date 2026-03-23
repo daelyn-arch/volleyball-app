@@ -23,6 +23,8 @@ const USAV_REGIONS = [
 export default function SetupPage() {
   const navigate = useNavigate();
   const createMatch = useMatchStore((s) => s.createMatch);
+  const scoresheetType = useMatchStore((s) => s.scoresheetType);
+  const isCif = scoresheetType === 'cif';
 
   const [homeName, setHomeName] = useState('');
   const [awayName, setAwayName] = useState('');
@@ -47,6 +49,7 @@ export default function SetupPage() {
   const [region, setRegion] = useState('');
   const [regionSearch, setRegionSearch] = useState('');
   const [regionOpen, setRegionOpen] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +74,7 @@ export default function SetupPage() {
       category,
       poolPhase: poolPhase.trim(),
       court: court.trim(),
+      scheduledTime: scheduledTime.trim(),
       scorer: scorer.trim(),
       referee: referee.trim(),
       downRef: downRef.trim(),
@@ -161,68 +165,77 @@ export default function SetupPage() {
 
           {showDetails && (
             <div className="px-4 pb-4 grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="block text-[15px] text-slate-400 mb-1">Competition</label>
-                <input type="text" placeholder="Name of the Competition" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">City, State</label>
-                <input type="text" placeholder="City, State" value={cityState} onChange={(e) => setCityState(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Hall</label>
-                <input type="text" placeholder="Hall / Venue" value={hall} onChange={(e) => setHall(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Match #</label>
-                <input type="text" placeholder="Match Number" value={matchNumber} onChange={(e) => setMatchNumber(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Court</label>
-                <input type="text" placeholder="Court" value={court} onChange={(e) => setCourt(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Level</label>
-                <input type="text" placeholder="Level" value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Pool / Phase</label>
-                <input type="text" placeholder="Pool Phase" value={poolPhase} onChange={(e) => setPoolPhase(e.target.value)} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Division</label>
-                <div className="flex gap-2">
-                  {(['Men', 'Women', 'CoEd'] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDivision(division === d ? '' : d)}
-                      className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${
-                        division === d ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
+              {isCif ? (<>
+                {/* CIF fields: Place, Level, Scheduled Time */}
+                <div className="col-span-2">
+                  <label className="block text-[15px] text-slate-400 mb-1">Place</label>
+                  <input type="text" placeholder="Place" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} />
                 </div>
-              </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Category</label>
-                <div className="flex gap-2">
-                  {(['Adult', 'Junior'] as const).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setCategory(category === c ? '' : c)}
-                      className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${
-                        category === c ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  ))}
+                <div className="col-span-2">
+                  <label className="block text-[15px] text-slate-400 mb-1">Level</label>
+                  <div className="flex gap-2">
+                    {(['Varsity', 'JV', 'Frosh/Soph'] as const).map((l) => (
+                      <button key={l} type="button" onClick={() => setLevel(level === l ? '' : l)}
+                        className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${level === l ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                      >{l}</button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                <div className="col-span-2">
+                  <label className="block text-[15px] text-slate-400 mb-1">Scheduled Time</label>
+                  <input type="text" placeholder="e.g. 5:00 PM" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} className={inputClass} />
+                </div>
+              </>) : (<>
+                {/* USAV fields */}
+                <div className="col-span-2">
+                  <label className="block text-[15px] text-slate-400 mb-1">Competition</label>
+                  <input type="text" placeholder="Name of the Competition" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">City, State</label>
+                  <input type="text" placeholder="City, State" value={cityState} onChange={(e) => setCityState(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Hall</label>
+                  <input type="text" placeholder="Hall / Venue" value={hall} onChange={(e) => setHall(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Match #</label>
+                  <input type="text" placeholder="Match Number" value={matchNumber} onChange={(e) => setMatchNumber(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Court</label>
+                  <input type="text" placeholder="Court" value={court} onChange={(e) => setCourt(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Level</label>
+                  <input type="text" placeholder="Level" value={level} onChange={(e) => setLevel(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Pool / Phase</label>
+                  <input type="text" placeholder="Pool Phase" value={poolPhase} onChange={(e) => setPoolPhase(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Division</label>
+                  <div className="flex gap-2">
+                    {(['Men', 'Women', 'CoEd'] as const).map((d) => (
+                      <button key={d} type="button" onClick={() => setDivision(division === d ? '' : d)}
+                        className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${division === d ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                      >{d}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Category</label>
+                  <div className="flex gap-2">
+                    {(['Adult', 'Junior'] as const).map((c) => (
+                      <button key={c} type="button" onClick={() => setCategory(category === c ? '' : c)}
+                        className={`flex-1 py-2 rounded-lg text-[15px] font-semibold transition-colors ${category === c ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                      >{c}</button>
+                    ))}
+                  </div>
+                </div>
+              </>)}
               <div className="col-span-2 border-t border-slate-700 pt-3 mt-1">
                 <label className="block text-[15px] text-slate-400 mb-2 font-medium">Officials</label>
               </div>
@@ -235,44 +248,46 @@ export default function SetupPage() {
                 <input type="text" placeholder="1st Referee" value={referee} onChange={(e) => setReferee(e.target.value)} className={inputClass} />
               </div>
               <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Down Referee</label>
-                <input type="text" placeholder="Down Ref" value={downRef} onChange={(e) => setDownRef(e.target.value)} className={inputClass} />
+                <label className="block text-[15px] text-slate-400 mb-1">2nd Referee</label>
+                <input type="text" placeholder="2nd Referee" value={downRef} onChange={(e) => setDownRef(e.target.value)} className={inputClass} />
               </div>
-              <div>
-                <label className="block text-[15px] text-slate-400 mb-1">Work Team</label>
-                <input type="text" placeholder="Work Team" value={workTeam} onChange={(e) => setWorkTeam(e.target.value)} className={inputClass} />
-              </div>
-              <div className="relative">
-                <label className="block text-[15px] text-slate-400 mb-1">Region</label>
-                <input
-                  type="text"
-                  placeholder="Search region..."
-                  value={regionOpen ? regionSearch : (region ? `${region} — ${USAV_REGIONS.find(r => r.code === region)?.name || ''}` : '')}
-                  onChange={(e) => { setRegionSearch(e.target.value); setRegionOpen(true); }}
-                  onFocus={() => setRegionOpen(true)}
-                  className={inputClass}
-                />
-                {regionOpen && (
-                  <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-slate-700 border border-slate-600 rounded-lg shadow-lg">
-                    {USAV_REGIONS
-                      .filter(r => {
-                        const q = regionSearch.toLowerCase();
-                        return !q || r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
-                      })
-                      .map(r => (
-                        <button
-                          key={r.code}
-                          type="button"
-                          onClick={() => { setRegion(r.code); setRegionSearch(''); setRegionOpen(false); }}
-                          className="w-full text-left px-3 py-2 text-[17px] text-white hover:bg-slate-600 transition-colors"
-                        >
-                          <span className="font-bold">{r.code}</span> — {r.name}
-                        </button>
-                      ))
-                    }
-                  </div>
-                )}
-              </div>
+              {!isCif && (<>
+                <div>
+                  <label className="block text-[15px] text-slate-400 mb-1">Work Team</label>
+                  <input type="text" placeholder="Work Team" value={workTeam} onChange={(e) => setWorkTeam(e.target.value)} className={inputClass} />
+                </div>
+                <div className="relative">
+                  <label className="block text-[15px] text-slate-400 mb-1">Region</label>
+                  <input
+                    type="text"
+                    placeholder="Search region..."
+                    value={regionOpen ? regionSearch : (region ? `${region} — ${USAV_REGIONS.find(r => r.code === region)?.name || ''}` : '')}
+                    onChange={(e) => { setRegionSearch(e.target.value); setRegionOpen(true); }}
+                    onFocus={() => setRegionOpen(true)}
+                    className={inputClass}
+                  />
+                  {regionOpen && (
+                    <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-slate-700 border border-slate-600 rounded-lg shadow-lg">
+                      {USAV_REGIONS
+                        .filter(r => {
+                          const q = regionSearch.toLowerCase();
+                          return !q || r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
+                        })
+                        .map(r => (
+                          <button
+                            key={r.code}
+                            type="button"
+                            onClick={() => { setRegion(r.code); setRegionSearch(''); setRegionOpen(false); }}
+                            className="w-full text-left px-3 py-2 text-[17px] text-white hover:bg-slate-600 transition-colors"
+                          >
+                            <span className="font-bold">{r.code}</span> — {r.name}
+                          </button>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+              </>)}
             </div>
           )}
         </div>

@@ -22,29 +22,19 @@ export default function ScoresheetTypePage() {
         </button>
         <h1 className="text-3xl font-bold text-white">Scoresheet Type</h1>
       </div>
-      <p className="text-slate-400 text-lg text-center max-w-md">
-        Choose a scoring format for this match.
-      </p>
-
-      <div className="flex flex-col gap-4 w-full max-w-sm">
+      <div className="flex flex-col gap-4 w-full max-w-sm mx-auto">
         <button
           onClick={() => handleSelect('usav')}
-          className="bg-blue-700 hover:bg-blue-600 text-white text-xl font-semibold py-6 px-8 rounded-xl transition-colors text-left"
+          className="bg-blue-700 hover:bg-blue-600 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
         >
-          <span className="block text-2xl font-bold">USAV</span>
-          <span className="block text-sm font-normal text-blue-200 mt-1">
-            Standard scoring with rotation grid display
-          </span>
+          USAV
         </button>
 
         <button
           onClick={() => handleSelect('cif')}
-          className="bg-emerald-700 hover:bg-emerald-600 text-white text-xl font-semibold py-6 px-8 rounded-xl transition-colors text-left"
+          className="bg-emerald-700 hover:bg-emerald-600 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
         >
-          <span className="block text-2xl font-bold">CIF</span>
-          <span className="block text-sm font-normal text-emerald-200 mt-1">
-            Visual scoresheet with running score, service terms, and mark symbols
-          </span>
+          CIF
         </button>
       </div>
     </div>

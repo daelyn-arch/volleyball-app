@@ -488,6 +488,7 @@ async function fillCifSetPage(
   if (state.metadata) {
     const m = state.metadata;
     if (m.competition) safeSetField(form, 'place', m.competition);
+    if (m.scheduledTime) safeSetField(form, 'scheduled time', m.scheduledTime);
     if (m.scorer) safeSetField(form, 'scorer', m.scorer);
     if (m.referee) safeSetField(form, '1st', m.referee);
     if (m.downRef) safeSetField(form, '2nd', m.downRef);

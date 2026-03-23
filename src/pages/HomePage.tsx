@@ -66,7 +66,7 @@ export default function HomePage() {
     <div className="flex flex-col items-center justify-center h-dvh p-8 gap-8">
       <h1 className="text-4xl font-bold tracking-[0.045em]"><span className="text-blue-500">S C O R E </span><span className="text-red-500">D A S H</span></h1>
       <p className="text-slate-400 text-lg text-center max-w-md">
-        USAV-compliant scorekeeping. Tap to score, auto-generate official scoresheets.
+        USAV/CIF Compliant Scorekeeper
       </p>
 
       <div className="flex flex-col gap-4 w-full max-w-sm mx-auto">
@@ -101,26 +101,6 @@ export default function HomePage() {
           className="bg-slate-800 hover:bg-slate-700 border border-green-500 text-white text-xl font-semibold py-5 px-8 rounded-xl transition-colors"
         >
           Scoresheets
-          {historyCount > 0 && (
-            <span className="block text-sm font-normal text-slate-400 mt-1">
-              {historyCount} match{historyCount !== 1 ? 'es' : ''}
-            </span>
-          )}
-          {hasCompletedMatch && (
-            syncedAt ? (
-              <span className="flex items-center justify-center gap-1.5 text-green-400 text-sm font-normal mt-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-                Saved to Cloud
-              </span>
-            ) : (
-              <span
-                onClick={(e) => { e.stopPropagation(); handleSync(); }}
-                className="block text-amber-400 text-sm font-normal mt-1"
-              >
-                {syncing ? 'Syncing...' : 'Not synced — tap to sync'}
-              </span>
-            )
-          )}
         </button>
       </div>
 
@@ -136,7 +116,7 @@ export default function HomePage() {
         PDF: {pdfStyle === 'official' ? 'Official Template' : 'Custom Scoresheet'}
       </button>
 
-      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.34</span>
+      <span className="text-slate-600 text-xs fixed bottom-2 right-3">v1.0.42</span>
     </div>
   );
 }

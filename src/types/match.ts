@@ -129,6 +129,7 @@ export interface MatchMetadata {
   category: 'Adult' | 'Junior' | '';
   poolPhase: string;
   court: string;
+  scheduledTime: string;
   scorer: string;
   referee: string;
   downRef: string;

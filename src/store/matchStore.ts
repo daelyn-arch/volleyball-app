@@ -149,6 +149,7 @@ const EMPTY_METADATA: MatchMetadata = {
   category: '',
   poolPhase: '',
   court: '',
+  scheduledTime: '',
   scorer: '',
   referee: '',
   downRef: '',
@@ -180,6 +181,10 @@ export const useMatchStore = create<MatchStore>()(
 
       createMatch: (homeTeam, awayTeam, config, metadata, scoresheetType) => {
         const matchConfig = { ...DEFAULT_CONFIG, ...config };
+        // CIF uses 18 subs per set
+        if (scoresheetType === 'cif' && !config?.maxSubsPerSet) {
+          matchConfig.maxSubsPerSet = 18;
+        }
         const sets: SetData[] = [];
         for (let i = 0; i < matchConfig.bestOf; i++) {
           sets.push(createEmptySetData());
@@ -229,7 +234,11 @@ export const useMatchStore = create<MatchStore>()(
       setFirstServe: (setIndex, team) => {
         set((state) => {
           const sets = [...state.sets];
-          sets[setIndex] = { ...sets[setIndex], firstServe: team };
+          sets[setIndex] = {
+            ...sets[setIndex],
+            firstServe: team,
+            startTime: sets[setIndex].startTime ?? Date.now(),
+          };
           return { sets };
         });
       },
