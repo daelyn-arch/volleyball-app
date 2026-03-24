@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMatchStore } from '@/store/matchStore';
 import { useDialog } from '@/components/ThemedDialog';
+import { getPdfStyle } from '@/utils/pdfStyleSetting';
 
 export default function ScoresheetPdfDownload({ fullWidth, label }: { fullWidth?: boolean; label?: string }) {
   const [loading, setLoading] = useState(false);
@@ -9,10 +10,26 @@ export default function ScoresheetPdfDownload({ fullWidth, label }: { fullWidth?
   async function handleDownload() {
     setLoading(true);
     try {
-      const { downloadScoresheet } = await import('@/utils/pdfFill');
-      const state = useMatchStore.getState();
-      await downloadScoresheet(state);
+      if (getPdfStyle() === 'custom') {
+        const { generatePdf } = await import('./generatePdf');
+        await generatePdf();
+      } else {
+        const { downloadScoresheet } = await import('@/utils/pdfFill');
+        const state = useMatchStore.getState();
+        await downloadScoresheet(state);
+      }
     } catch (err) {
+      // Fallback: if custom fails, try official; if official fails, try custom
+      try {
+        if (getPdfStyle() === 'custom') {
+          const { downloadScoresheet } = await import('@/utils/pdfFill');
+          await downloadScoresheet(useMatchStore.getState());
+        } else {
+          const { generatePdf } = await import('./generatePdf');
+          await generatePdf();
+        }
+        return;
+      } catch { /* fallthrough */ }
       console.error('PDF generation failed:', err);
       showAlert('PDF Error', 'PDF generation failed. See console for details.');
     } finally {

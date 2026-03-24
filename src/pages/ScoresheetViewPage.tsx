@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchStore } from '@/store/matchStore';
 import { getSetSummary, getSetsWon, getSetScore } from '@/store/derived';
@@ -123,10 +123,30 @@ export default function ScoresheetViewPage() {
         </button>
       </div>
 
+      {/* Set navigation buttons */}
+      {setsPlayed.length > 1 && (
+        <div className="max-w-5xl mx-auto px-4 pt-3 flex gap-2">
+          {setsPlayed.map((si) => {
+            const sc = getSetScore(events, si);
+            return (
+              <button
+                key={si}
+                onClick={() => document.getElementById(`set-${si}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg text-base font-bold transition-colors"
+              >
+                Set {si + 1} <span className="text-slate-400 font-normal">({sc.home}-{sc.away})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Sets */}
       <div className="max-w-5xl mx-auto p-4">
         {setsPlayed.map((si) => (
-          <ScoresheetSet key={si} summary={getSetSummary(state, si)} state={state} />
+          <div key={si} id={`set-${si}`}>
+            <ScoresheetSet summary={getSetSummary(state, si)} state={state} />
+          </div>
         ))}
       </div>
 

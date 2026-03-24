@@ -971,7 +971,7 @@ export default function LineupPage() {
               style={{ gridRow: g.row, gridColumn: g.col }}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, team, g.pos)}
-              onClick={(e) => { e.stopPropagation(); handleSlotClick(team, g.pos); }}
+              onClick={(e) => { e.stopPropagation(); if (selectedCard) { e.preventDefault(); handleSlotClick(team, g.pos); } }}
             >
               <label className="text-xs text-slate-400 mb-1">{g.label}</label>
               <input
@@ -979,6 +979,7 @@ export default function LineupPage() {
                 type="text"
                 inputMode="numeric"
                 value={inputs[g.pos]}
+                onPointerDown={(e) => { if (selectedCard) e.preventDefault(); }}
                 onChange={(e) => {
                   const val = cleanDigits(e.target.value);
                   updateInput(team, g.pos, val, val.length >= 2);
@@ -1013,7 +1014,7 @@ export default function LineupPage() {
                 maxLength={2}
               />
               {g.pos === 1 && (
-                <span className="text-[10px] text-yellow-500 mt-0.5">Server</span>
+                <span className="text-[10px] text-yellow-500 mt-0.5">SERVER</span>
               )}
             </div>
           ))}
@@ -1048,7 +1049,7 @@ export default function LineupPage() {
         {/* Bench players — visible = bench pool minus those in lineup or libero */}
         {renderAddSection(
           `${team}-bench`,
-          'Bench Players',
+          'Bench Players (Tap or Drag)',
           'Add Player',
           visibleBench,
           (num) => setBench(prev => prev.filter(n => n !== num)),
